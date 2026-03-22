@@ -1,6 +1,7 @@
 # CareBridge Platform
 
-<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/fad1a9d2-a042-44b0-91f3-1035e2273f2e" />
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/999f4c9e-0648-4467-81ae-645ea4f4fca8" />
+
 
 <br/>
 의료 장비·게이트웨이에서 들어오는 **TCP 메시지를 수신·해석·저장**하고, **운영자 콘솔(Web)**에서 **실시간 채팅·접속자(Presence)·장비 이벤트**를 한 화면에서 볼 수 있게 만든 **풀스택 샘플 프로젝트**입니다.
