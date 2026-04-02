@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo, useState } from "react";
+
 import { useCarebridgeConsole } from "@/features/console/hooks/use-carebridge-console";
 import { WorkItemBoard } from "@/features/work-items/components/work-item-board";
 
@@ -18,6 +20,17 @@ function formatInterval(value: number | undefined) {
   if (!value) return "-";
   return `${Math.round(value / 1000)}초 간격`;
 }
+
+type MenuKey = "members" | "presence" | "chat" | "device-overview" | "device-events" | "work-items";
+
+const MENU_ITEMS: { key: MenuKey; label: string }[] = [
+  { key: "members", label: "회원 관리" },
+  { key: "presence", label: "접속 현황" },
+  { key: "chat", label: "채팅" },
+  { key: "device-overview", label: "장비 현황" },
+  { key: "device-events", label: "이벤트 피드" },
+  { key: "work-items", label: "워크아이템" },
+];
 
 export function CarebridgeConsole() {
   const {
@@ -51,55 +64,21 @@ export function CarebridgeConsole() {
 
   const socketTone =
     socketState === "CONNECTED" ? "live" : socketState === "CONNECTING" ? "warm" : "muted";
+  const [activeMenu, setActiveMenu] = useState<MenuKey>("members");
+  const [memberPage, setMemberPage] = useState(1);
+
+  const pageSize = 10;
+  const memberTotalPages = Math.max(1, Math.ceil(members.length / pageSize));
+  const pagedMembers = useMemo(() => {
+    const safePage = Math.min(memberPage, memberTotalPages);
+    const start = (safePage - 1) * pageSize;
+    return members.slice(start, start + pageSize);
+  }, [memberPage, memberTotalPages, members]);
 
   
   if (!token || !currentUser) {
     return (
       <main className="consoleShell landingShell">
-        
-        <nav className="siteHeader">
-          <div className="siteHeaderInner">
-            <div className="siteLogo">
-              <div className="siteLogoMark">CB</div>
-              <span className="siteLogoText">CareBridge</span>
-            </div>
-          </div>
-        </nav>
-
-        
-        <section className="landingHero" style={{ marginTop: 40 }}>
-          <div className="heroBadge">
-            <span className="heroBadgeDot" />
-            CareBridge Interface Server · 의료 장비 통합 콘솔
-          </div>
-          <h1 className="heroTitle">
-            의료 장비 인터페이스,<br />
-            <strong>실시간</strong> 운영자 콘솔
-          </h1>
-          <p className="heroCopy">
-            TCP 장비 메시지를 수신·해석·저장하고, WebSocket으로 운영자 콘솔에 실시간 브로드캐스트합니다.
-            Redis Presence로 접속 현황을 관리하며 채팅 기능을 제공합니다.
-          </p>
-
-          <div className="heroCards">
-            <article className="infoCard">
-              <h2>🔐 데모 계정</h2>
-              <p><strong>admin</strong> / Admin1234!</p>
-              <p><strong>operator</strong> / Operator1234!</p>
-            </article>
-            <article className="infoCard">
-              <h2>📡 TCP 장비 메시지 샘플</h2>
-              <code>DEVICE=XRAY-01|PATIENT=P-1004|RESULT=NORMAL|STATUS=READY</code>
-            </article>
-            <article className="infoCard">
-              <h2>💡 Presence 규칙</h2>
-              <p>온라인: <strong>TTL 70초</strong> 자동 갱신 (20초 주기 PING)</p>
-              <p>오프라인: Redis TTL 만료 시 자동 처리</p>
-            </article>
-          </div>
-        </section>
-
-        
         <section className="authGrid">
           <article className="authPanel">
             <div className="authPanelHead">
@@ -191,122 +170,166 @@ export function CarebridgeConsole() {
     );
   }
 
-  
   return (
-    <>
-      
-      <nav className="siteHeader">
-        <div className="siteHeaderInner">
-          <div className="siteLogo">
-            <div className="siteLogoMark">CB</div>
-            <span className="siteLogoText">CareBridge Console</span>
-          </div>
-          <div className="headerNav">
+    <main className="legacyAdminPage">
+      <aside className="legacySidebar">
+        <div className="legacyBrand">CareBridge Platform</div>
+        <nav className="legacyMenu">
+          {MENU_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              className={`legacyMenuItem ${activeMenu === item.key ? "active" : ""}`}
+              onClick={() => {
+                setActiveMenu(item.key);
+                if (item.key === "members") setMemberPage(1);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <section className="legacyMain">
+        <header className="legacyTopbar">
+          <div className="legacyTopbarRight">
             <span className={`socketBadge ${socketTone}`}>{socketState}</span>
-            <span className="identityBadge">{currentUser.displayName} · {currentUser.role}</span>
             <button className="ghostButton" onClick={() => void refreshConsole()}>새로고침</button>
             <button className="ghostButton" onClick={() => void signOut()}>로그아웃</button>
           </div>
-        </div>
-      </nav>
+        </header>
 
-      <main className="consoleShell">
-        
-        <div className="consoleHeader">
-          <div>
-            <p className="eyebrow" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--primary)', marginBottom: 4 }}>
-              Medical Device Interface Console
-            </p>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-heading)', letterSpacing: '-0.04em' }}>
-              실시간 장비 이벤트 · 운영자 채팅 · 접속 현황
-            </h1>
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            총 멤버 {members.length}명 · 온라인 {connectedCount}명
-          </div>
-        </div>
+        <div className="legacyContent">
+          <div className="legacyBreadcrumb">홈 / {MENU_ITEMS.find((item) => item.key === activeMenu)?.label}</div>
+          <h1 className="legacyTitle">{MENU_ITEMS.find((item) => item.key === activeMenu)?.label}</h1>
 
-        {error ? <p className="state error headerError">{error}</p> : null}
+          {error ? <p className="state error">{error}</p> : null}
 
-        
-        <section className="consoleGrid">
-
-          
-          <aside className="panel">
-            <div className="panelHead">
-              <div>
-                <h2>접속 현황</h2>
-                <p className="subtle">멤버 {members.length}명 / 온라인 {connectedCount}명</p>
+          {activeMenu === "members" ? (
+            <section className="legacyPanel" id="section-members">
+              <div className="legacyPanelHead">
+                <div className="legacyMeta">총 {members.length}명 / 온라인 {connectedCount}명</div>
               </div>
-              <span className="badge">Redis 기반</span>
-            </div>
-
-            <div className="presenceList">
-              {members.map((member) => {
-                const online = member.online === 1;
-                return (
-                  <div className="presenceRow" key={member.id}>
-                    <div className={`presenceDot ${online ? "online" : "offline"}`} />
-                    <div className="presenceMeta">
-                      <strong>{member.displayName}</strong>
-                      <span>{member.username} · {member.role}</span>
-                    </div>
-                    <span className={`presenceBadge ${online ? "online" : "offline"}`}>
-                      {online ? "ON" : "OFF"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </aside>
-
-          
-          <section className="panel chatPanel">
-            <div className="panelHead">
-              <div>
-                <h2>운영자 채팅</h2>
-                <p className="subtle">WebSocket 실시간 메시지</p>
+              <div className="legacyTableWrap">
+                <table className="legacyTable">
+                  <thead>
+                    <tr>
+                      <th>유저 ID</th>
+                      <th>닉네임</th>
+                      <th>이메일</th>
+                      <th>메모</th>
+                      <th>작성자</th>
+                      <th>작성일시</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedMembers.map((member) => (
+                      <tr key={member.id}>
+                        <td>{member.username}</td>
+                        <td>{member.displayName}</td>
+                        <td>{member.username}@email.com</td>
+                        <td>{member.online === 1 ? "온라인" : "오프라인"}</td>
+                        <td>{currentUser.displayName}</td>
+                        <td>{formatTime(new Date().toISOString())}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <span className={`badge ${socketState !== "CONNECTED" ? "neutral" : ""}`}>
-                {socketState === "CONNECTED" ? "LIVE" : "대기 중"}
-              </span>
-            </div>
-
-            <div className="chatStream">
-              {messages.map((message) => (
-                <article
-                  className={`chatBubble ${message.senderId === currentUser.id ? "mine" : ""}`}
-                  key={message.id}
+              <div className="legacyPagination">
+                <button
+                  className="legacyPageBtn"
+                  onClick={() => setMemberPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={memberPage <= 1}
                 >
-                  <div className="chatMeta">
-                    <strong>{message.senderName}</strong>
-                    <span>{message.senderRole}</span>
-                    <time>{formatTime(message.sentAt)}</time>
-                  </div>
-                  <p>{message.content}</p>
-                </article>
-              ))}
-            </div>
+                  이전
+                </button>
+                <span className="legacyPageInfo">{memberPage} / {memberTotalPages}</span>
+                <button
+                  className="legacyPageBtn"
+                  onClick={() => setMemberPage((prev) => Math.min(prev + 1, memberTotalPages))}
+                  disabled={memberPage >= memberTotalPages}
+                >
+                  다음
+                </button>
+              </div>
+            </section>
+          ) : null}
 
-            <form
-              className="chatComposer"
-              onSubmit={(e) => { e.preventDefault(); submitChat(); }}
-            >
-              <textarea
-                value={chatDraft}
-                onChange={(e) => setChatDraft(e.target.value)}
-                placeholder="운영자에게 메시지를 보냅니다. (Shift+Enter: 줄바꿈)"
-              />
-              <button className="primaryButton" type="submit">
-                메시지 전송
-              </button>
-            </form>
-          </section>
+          {activeMenu === "presence" ? (
+            <section className="panel" id="section-presence" style={{ marginTop: 16 }}>
+              <div className="panelHead">
+                <div>
+                  <h2>접속 상태</h2>
+                  <p className="subtle">실시간 Presence</p>
+                </div>
+                <span className="badge">Redis</span>
+              </div>
+              <div className="presenceList">
+                {members.map((member) => {
+                  const online = member.online === 1;
+                  return (
+                    <div className="presenceRow" key={`presence-${member.id}`}>
+                      <div className={`presenceDot ${online ? "online" : "offline"}`} />
+                      <div className="presenceMeta">
+                        <strong>{member.displayName}</strong>
+                        <span>{member.username} · {member.role}</span>
+                      </div>
+                      <span className={`presenceBadge ${online ? "online" : "offline"}`}>
+                        {online ? "ON" : "OFF"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
-          
-          <aside className="sideStack">
-            
-            <section className="panel">
+          {activeMenu === "chat" ? (
+            <section className="panel chatPanel" id="section-chat" style={{ marginTop: 16 }}>
+              <div className="panelHead">
+                <div>
+                  <h2>운영자 채팅</h2>
+                  <p className="subtle">WebSocket 실시간 메시지</p>
+                </div>
+                <span className={`badge ${socketState !== "CONNECTED" ? "neutral" : ""}`}>
+                  {socketState === "CONNECTED" ? "LIVE" : "대기 중"}
+                </span>
+              </div>
+              <div className="chatStream">
+                {messages.map((message) => (
+                  <article
+                    className={`chatBubble ${message.senderId === currentUser.id ? "mine" : ""}`}
+                    key={message.id}
+                  >
+                    <div className="chatMeta">
+                      <strong>{message.senderName}</strong>
+                      <span>{message.senderRole}</span>
+                      <time>{formatTime(message.sentAt)}</time>
+                    </div>
+                    <p>{message.content}</p>
+                  </article>
+                ))}
+              </div>
+              <form
+                className="chatComposer"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitChat();
+                }}
+              >
+                <textarea
+                  value={chatDraft}
+                  onChange={(e) => setChatDraft(e.target.value)}
+                  placeholder="운영자에게 메시지를 보냅니다."
+                />
+                <button className="primaryButton" type="submit">메시지 전송</button>
+              </form>
+            </section>
+          ) : null}
+
+          {activeMenu === "device-overview" ? (
+            <section className="panel" id="section-device-overview" style={{ marginTop: 16 }}>
               <div className="panelHead">
                 <div>
                   <h2>장비 인터페이스 현황</h2>
@@ -329,7 +352,7 @@ export function CarebridgeConsole() {
               <div className="statGrid">
                 <div className="statCard">
                   <span>시뮬레이터</span>
-                  <strong style={{ color: overview?.simulatorEnabled ? 'var(--success)' : 'var(--text-muted)' }}>
+                  <strong style={{ color: overview?.simulatorEnabled ? "var(--success)" : "var(--text-muted)" }}>
                     {overview?.simulatorEnabled ? "작동 중" : "중지"}
                   </strong>
                 </div>
@@ -337,11 +360,6 @@ export function CarebridgeConsole() {
                   <span>전송 간격</span>
                   <strong>{formatInterval(overview?.simulatorIntervalMillis)}</strong>
                 </div>
-              </div>
-
-              <div className="protocolCard">
-                <p>KEY_VALUE 프로토콜 샘플 (파이프 구분자)</p>
-                <span className="mono">DEVICE=XRAY-01|PATIENT=P-1004|RESULT=NORMAL|STATUS=READY</span>
               </div>
 
               <div className="compactStack formStack">
@@ -363,16 +381,16 @@ export function CarebridgeConsole() {
                 </button>
               </div>
             </section>
+          ) : null}
 
-            
-            <section className="panel">
+          {activeMenu === "device-events" ? (
+            <section className="panel" id="section-device-events" style={{ marginTop: 16 }}>
               <div className="panelHead">
                 <div>
                   <h2>장비 이벤트 피드</h2>
-                  <p className="subtle">최근 수신 이벤트 (실시간 갱신)</p>
+                  <p className="subtle">최근 수신 이벤트</p>
                 </div>
               </div>
-
               <div className="eventList">
                 {deviceEvents.map((event) => (
                   <article className="eventCard" key={event.id}>
@@ -389,12 +407,15 @@ export function CarebridgeConsole() {
                 ))}
               </div>
             </section>
-          </aside>
-        </section>
+          ) : null}
 
-        
-        <WorkItemBoard token={token} />
-      </main>
-    </>
+          {activeMenu === "work-items" ? (
+            <section id="section-work-items" style={{ marginTop: 16 }}>
+              <WorkItemBoard token={token} />
+            </section>
+          ) : null}
+        </div>
+      </section>
+    </main>
   );
 }
