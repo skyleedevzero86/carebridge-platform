@@ -37,13 +37,12 @@ public class DeviceSimulationScheduler {
 
         String payload = payloadFactory.nextPayload();
 
-        try (
-                Socket socket = new Socket();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))
-        ) {
+        try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(appProperties.simulator().host(), appProperties.simulator().port()), 2_000);
             socket.setSoTimeout(2_000);
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
 
             writer.write(payload);
             writer.newLine();
