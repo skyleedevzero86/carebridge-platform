@@ -15,6 +15,7 @@ import {
   recentMessages,
   refreshToken,
   register,
+  sendChatMessage,
   simulateDeviceEvent,
 } from "@/features/console/repository/carebridge-api";
 
@@ -59,7 +60,7 @@ export function useCarebridgeConsole() {
   const [overview, setOverview] = useState<DeviceOverview | null>(null);
   const [chatDraft, setChatDraft] = useState("");
   const [simulationPayload, setSimulationPayload] = useState(DEFAULT_SIMULATION_PAYLOAD);
-  const [loginForm, setLoginForm] = useState<LoginForm>({ username: "admin", password: "Admin1234!" });
+  const [loginForm, setLoginForm] = useState<LoginForm>({ username: "operator", password: "Operator1234!" });
   const [registerForm, setRegisterForm] = useState<RegisterForm>({ username: "", displayName: "", password: "" });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -301,18 +302,27 @@ export function useCarebridgeConsole() {
     }
   };
 
-  const submitChat = () => {
+  const submitChat = async () => {
     if (!chatDraft.trim()) {
       return;
     }
 
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setError("채팅 서버와 연결되어 있지 않습니다.");
+    if (!token || !currentUser) {
+      setError("채팅 전송에 필요한 인증 정보가 없습니다.");
       return;
     }
 
-    wsRef.current.send(JSON.stringify({ type: "CHAT", content: chatDraft.trim() }));
-    setChatDraft("");
+    const content = chatDraft.trim();
+    try {
+      const saved = await sendChatMessage(token, content);
+      startTransition(() => {
+        setMessages((current) => [...current, saved].slice(-50));
+      });
+      setChatDraft("");
+      setError(null);
+    } catch (chatError) {
+      setError(chatError instanceof Error ? chatError.message : "채팅 메시지 전송에 실패했습니다.");
+    }
   };
 
   const submitSimulation = async () => {

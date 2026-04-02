@@ -21,28 +21,32 @@ public class DemoDataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (userJpaRepository.count() > 0) {
+        LocalDateTime now = LocalDateTime.now();
+        ensureUser("admin", "운영관리자", "Admin1234!", UserRole.ADMIN, now);
+        ensureUser("operator", "장비운영자", "Operator1234!", UserRole.OPERATOR, now);
+    }
+
+    private void ensureUser(String username, String displayName, String password, UserRole role, LocalDateTime createdAt) {
+        UserEntity entity = userJpaRepository.findByUsername(username).orElse(null);
+        if (entity == null) {
+            userJpaRepository.save(new UserEntity(
+                    null,
+                    username,
+                    displayName,
+                    passwordEncoder.encode(password),
+                    role,
+                    createdAt
+            ));
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
-
         userJpaRepository.save(new UserEntity(
-                null,
-                "admin",
-                "운영관리자",
-                passwordEncoder.encode("Admin1234!"),
-                UserRole.ADMIN,
-                now
-        ));
-
-        userJpaRepository.save(new UserEntity(
-                null,
-                "operator",
-                "장비운영자",
-                passwordEncoder.encode("Operator1234!"),
-                UserRole.OPERATOR,
-                now
+                entity.getId(),
+                entity.getUsername(),
+                displayName,
+                passwordEncoder.encode(password),
+                role,
+                entity.getCreatedAt()
         ));
     }
 }

@@ -130,6 +130,20 @@ export async function recentMessages(token: string): Promise<ChatMessage[]> {
   return response.json();
 }
 
+export async function sendChatMessage(token: string, content: string): Promise<ChatMessage> {
+  const response = await fetch(`${API_BASE_URL}/api/chat/messages`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ content }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response, "채팅 메시지 전송에 실패했습니다."));
+  }
+
+  return response.json();
+}
+
 export async function recentDeviceEvents(token: string): Promise<DeviceEvent[]> {
   const response = await fetch(`${API_BASE_URL}/api/device-interface/events`, {
     cache: "no-store",

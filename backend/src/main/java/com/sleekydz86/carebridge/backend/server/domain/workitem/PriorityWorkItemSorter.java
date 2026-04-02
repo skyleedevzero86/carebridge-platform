@@ -15,8 +15,9 @@ public class PriorityWorkItemSorter implements WorkItemSorter {
     @Override
     public List<WorkItem> sort(List<WorkItem> workItems) {
         return workItems.stream()
-                .sorted(Comparator.comparing(WorkItem::priority)
-                        .thenComparing(WorkItem::updatedAt, Comparator.reverseOrder()))
+                .sorted(Comparator
+                        .comparing(WorkItem::priority, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(WorkItem::updatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 }

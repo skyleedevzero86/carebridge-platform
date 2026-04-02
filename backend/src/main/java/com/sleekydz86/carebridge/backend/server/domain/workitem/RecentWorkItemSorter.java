@@ -15,7 +15,10 @@ public class RecentWorkItemSorter implements WorkItemSorter {
     @Override
     public List<WorkItem> sort(List<WorkItem> workItems) {
         return workItems.stream()
-                .sorted(Comparator.comparing(WorkItem::updatedAt).reversed())
+                .sorted(Comparator.comparing(
+                        WorkItem::updatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())
+                ).reversed())
                 .toList();
     }
 }

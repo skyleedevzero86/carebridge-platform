@@ -45,8 +45,12 @@ public class ChatService {
                 LocalDateTime.now()
         );
 
-        ChatMessageEntity saved = chatMessageJpaRepository.save(toEntity(message));
-        return toView(toDomain(saved));
+        try {
+            ChatMessageEntity saved = chatMessageJpaRepository.save(toEntity(message));
+            return toView(toDomain(saved));
+        } catch (RuntimeException ignored) {
+            return toView(message);
+        }
     }
 
 

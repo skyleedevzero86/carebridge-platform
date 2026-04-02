@@ -106,11 +106,14 @@ export function CarebridgeConsole() {
                 className="formStack"
                 onSubmit={(e) => { e.preventDefault(); void submitLogin(); }}
               >
+                <p className="subtle" style={{ marginTop: -4 }}>
+                  로그인 힌트: 운영자 <strong>operator / Operator1234!</strong>, 관리자 <strong>admin / Admin1234!</strong>
+                </p>
                 <label className="field">
                   <span>사용자명 (Username)</span>
                   <input
                     value={loginForm.username}
-                    placeholder="admin"
+                    placeholder="예: operator"
                     onChange={(e) => setLoginForm((c) => ({ ...c, username: e.target.value }))}
                   />
                 </label>
@@ -119,7 +122,7 @@ export function CarebridgeConsole() {
                   <input
                     type="password"
                     value={loginForm.password}
-                    placeholder="••••••••"
+                    placeholder="예: Operator1234!"
                     onChange={(e) => setLoginForm((c) => ({ ...c, password: e.target.value }))}
                   />
                 </label>

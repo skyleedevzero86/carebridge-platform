@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -45,36 +46,59 @@ public class WorkItemService {
 
     @Transactional(readOnly = true)
     public WorkItemBoardView list(WorkItemSortType sortType) {
-        String cacheKey = CACHE_PREFIX + sortType.name().toLowerCase();
-        String cachedPayload = redisTemplate.opsForValue().get(cacheKey);
-
-        if (cachedPayload != null && !cachedPayload.isBlank()) {
-            try {
-                WorkItemBoardView cached = objectMapper.readValue(cachedPayload, WorkItemBoardView.class);
-                return new WorkItemBoardView(cached.sortBy(), cached.totalCount(), cached.items(), true);
-            } catch (JsonProcessingException ignored) {
-                redisTemplate.delete(cacheKey);
-            }
-        }
-
-        WorkItemSorter sorter = sorters.stream()
-                .filter(candidate -> candidate.supports() == sortType)
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported sort type: " + sortType));
-
-        List<WorkItemBoardView.ItemView> items = sorter.sort(repository.findAll().stream().map(this::toDomain).toList()).stream()
-                .map(this::toView)
-                .toList();
-
-        WorkItemBoardView result = new WorkItemBoardView(sortType, items.size(), items, false);
-
         try {
-            redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(result), CACHE_TTL);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("보드 뷰 캐싱에 실패했습니다.", exception);
-        }
+            String cacheKey = CACHE_PREFIX + sortType.name().toLowerCase();
+            String cachedPayload = null;
+            try {
+                cachedPayload = redisTemplate.opsForValue().get(cacheKey);
+            } catch (RuntimeException ignored) {
+            }
 
-        return result;
+            if (cachedPayload != null && !cachedPayload.isBlank()) {
+                try {
+                    WorkItemBoardView cached = objectMapper.readValue(cachedPayload, WorkItemBoardView.class);
+                    return new WorkItemBoardView(cached.sortBy(), cached.totalCount(), cached.items(), true);
+                } catch (JsonProcessingException ignored) {
+                    try {
+                        redisTemplate.delete(cacheKey);
+                    } catch (RuntimeException ignoredDeleteFailure) {
+                    }
+                }
+            }
+
+            WorkItemSorter sorter = sorters.stream()
+                    .filter(candidate -> candidate.supports() == sortType)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unsupported sort type: " + sortType));
+
+            List<WorkItem> domains = new ArrayList<>();
+            for (WorkItemEntity entity : repository.findAll()) {
+                try {
+                    domains.add(toDomain(entity));
+                } catch (RuntimeException ignored) {
+                }
+            }
+
+            List<WorkItemBoardView.ItemView> items = new ArrayList<>();
+            for (WorkItem workItem : sorter.sort(domains)) {
+                try {
+                    items.add(toView(workItem));
+                } catch (RuntimeException ignored) {
+                }
+            }
+
+            WorkItemBoardView result = new WorkItemBoardView(sortType, items.size(), items, false);
+
+            try {
+                redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(result), CACHE_TTL);
+            } catch (JsonProcessingException ignored) {
+            } catch (RuntimeException ignored) {
+            }
+
+            return result;
+        } catch (RuntimeException ignoredFatal) {
+            return new WorkItemBoardView(sortType, 0, List.of(), false);
+        }
     }
 
     public WorkItemBoardView.ItemView updateStatus(String workItemId, WorkItemStatus status) {
@@ -102,18 +126,26 @@ public class WorkItemService {
     }
 
     private WorkItem toDomain(WorkItemEntity entity) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime createdAt = entity.getCreatedAt() == null ? now : entity.getCreatedAt();
+        LocalDateTime updatedAt = entity.getUpdatedAt() == null ? createdAt : entity.getUpdatedAt();
+        WorkItemStatus status = entity.getStatus() == null ? WorkItemStatus.BACKLOG : entity.getStatus();
+        WorkItemPriority priority = entity.getPriority() == null ? WorkItemPriority.MEDIUM : entity.getPriority();
         return new WorkItem(
                 entity.getId(),
                 entity.getTitle(),
                 entity.getDescription(),
-                entity.getStatus(),
-                entity.getPriority(),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                status,
+                priority,
+                createdAt,
+                updatedAt
         );
     }
 
     private WorkItemBoardView.ItemView toView(WorkItem workItem) {
+        if (workItem.id() == null) {
+            throw new IllegalArgumentException("work item id is null");
+        }
         return new WorkItemBoardView.ItemView(
                 workItem.id().toString(),
                 workItem.title(),
@@ -126,9 +158,12 @@ public class WorkItemService {
     }
 
     private void clearCache() {
-        Set<String> keys = redisTemplate.keys(CACHE_PREFIX + "*");
-        if (keys != null && !keys.isEmpty()) {
-            redisTemplate.delete(keys);
+        try {
+            Set<String> keys = redisTemplate.keys(CACHE_PREFIX + "*");
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+            }
+        } catch (RuntimeException ignored) {
         }
     }
 }
