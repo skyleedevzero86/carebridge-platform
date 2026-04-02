@@ -184,6 +184,7 @@ export function useCarebridgeConsole() {
     }
 
     void bootstrapEffect(token).catch((bootstrapError) => {
+      setToken(null);
       setError(bootstrapError instanceof Error ? bootstrapError.message : "초기 데이터를 불러오지 못했습니다.");
     });
   }, [token]);

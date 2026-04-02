@@ -68,7 +68,7 @@ public class ChatService {
 
     private ChatMessageEntity toEntity(ChatMessage message) {
         return new ChatMessageEntity(
-                message.id(),
+                null,
                 message.senderId(),
                 message.senderName(),
                 message.senderRole(),
