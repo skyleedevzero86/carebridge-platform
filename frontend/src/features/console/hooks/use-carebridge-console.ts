@@ -62,6 +62,7 @@ export function useCarebridgeConsole() {
   const [simulationPayload, setSimulationPayload] = useState(DEFAULT_SIMULATION_PAYLOAD);
   const [loginForm, setLoginForm] = useState<LoginForm>({ username: "operator", password: "Operator1234!" });
   const [registerForm, setRegisterForm] = useState<RegisterForm>({ username: "", displayName: "", password: "" });
+  const [socketReconnectTick, setSocketReconnectTick] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -230,6 +231,26 @@ export function useCarebridgeConsole() {
       return;
     }
 
+    const intervalId = window.setInterval(async () => {
+      try {
+        const latest = await recentMessages(token);
+        startTransition(() => {
+          setMessages(latest);
+        });
+      } catch {
+      }
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    let closedByCleanup = false;
+    let reconnectTimer: number | null = null;
     const socket = new WebSocket(`${WS_BASE_URL}?token=${encodeURIComponent(token)}`);
     wsRef.current = socket;
     setSocketState("CONNECTING");
@@ -261,10 +282,20 @@ export function useCarebridgeConsole() {
 
     socket.onclose = () => {
       setSocketState("DISCONNECTED");
+      if (closedByCleanup) {
+        return;
+      }
+      reconnectTimer = window.setTimeout(() => {
+        setSocketReconnectTick((current) => current + 1);
+      }, 1500);
     };
 
     return () => {
+      closedByCleanup = true;
       window.clearInterval(intervalId);
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+      }
       if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
         socket.close();
       }
@@ -272,7 +303,7 @@ export function useCarebridgeConsole() {
         wsRef.current = null;
       }
     };
-  }, [token]);
+  }, [token, socketReconnectTick]);
 
   const submitLogin = async () => {
     setBusy(true);
@@ -313,6 +344,18 @@ export function useCarebridgeConsole() {
     }
 
     const content = chatDraft.trim();
+    const socket = wsRef.current;
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      try {
+        socket.send(JSON.stringify({ type: "CHAT", content }));
+        setChatDraft("");
+        setError(null);
+        return;
+      } catch {
+      }
+    }
+
     try {
       const saved = await sendChatMessage(token, content);
       startTransition(() => {
