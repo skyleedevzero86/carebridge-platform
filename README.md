@@ -12,6 +12,14 @@
 
 <br/>
 
+<img width="1901" height="653" alt="image" src="https://github.com/user-attachments/assets/ecec9976-bd3d-4254-92e8-203d0db7a94b" />
+
+<br/>
+
+<img width="1885" height="809" alt="image" src="https://github.com/user-attachments/assets/ae42ee32-98e1-45af-8a6e-f9df703fddba" />
+
+<br/>
+
 | 구분 | 기술 |
 |------|------|
 | Backend | Java 21, **Spring Boot 4**, Spring Security (JWT), Spring Data JPA, Spring Data Redis, Spring WebSocket, Spring Validation, Spring Actuator, Lombok, PostgreSQL, 커스텀 TCP 게이트웨이 |
