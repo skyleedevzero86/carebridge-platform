@@ -1,5 +1,7 @@
 package com.sleekydz86.carebridge.backend.server.application.workitem;
 
+import com.sleekydz86.carebridge.backend.server.domain.workitem.WorkItemPriority;
+import com.sleekydz86.carebridge.backend.server.domain.workitem.WorkItemStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
