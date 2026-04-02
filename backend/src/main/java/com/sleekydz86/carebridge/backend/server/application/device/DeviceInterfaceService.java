@@ -94,7 +94,7 @@ public class DeviceInterfaceService {
 
     private DeviceEventEntity toEntity(DeviceEvent event) {
         return new DeviceEventEntity(
-                event.id(),
+                null,
                 event.deviceCode(),
                 event.protocol(),
                 event.patientCode(),
