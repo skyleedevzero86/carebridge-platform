@@ -1,7 +1,8 @@
 package com.sleekydz86.carebridge.backend.global.config;
 
-
 import java.time.LocalDateTime;
+import com.sleekydz86.carebridge.backend.server.application.auth.UserEntity;
+import com.sleekydz86.carebridge.backend.server.application.auth.UserJpaRepository;
 import com.sleekydz86.carebridge.backend.server.domain.auth.UserRole;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
