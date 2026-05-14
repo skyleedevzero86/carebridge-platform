@@ -12,11 +12,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import com.sleekydz86.carebridge.backend.global.config.AppProperties;
+import com.sleekydz86.carebridge.backend.server.application.emr.EmrInterfaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
-
 
 @Component
 public class TcpDeviceGateway implements SmartLifecycle {
@@ -24,6 +24,7 @@ public class TcpDeviceGateway implements SmartLifecycle {
     private static final Logger log = LoggerFactory.getLogger(TcpDeviceGateway.class);
 
     private final DeviceInterfaceService deviceInterfaceService;
+    private final EmrInterfaceService emrInterfaceService;
     private final AppProperties appProperties;
     private final ExecutorService acceptExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService clientExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -31,8 +32,9 @@ public class TcpDeviceGateway implements SmartLifecycle {
     private volatile boolean running;
     private ServerSocket serverSocket;
 
-    public TcpDeviceGateway(DeviceInterfaceService deviceInterfaceService, AppProperties appProperties) {
+    public TcpDeviceGateway(DeviceInterfaceService deviceInterfaceService, EmrInterfaceService emrInterfaceService, AppProperties appProperties) {
         this.deviceInterfaceService = deviceInterfaceService;
+        this.emrInterfaceService = emrInterfaceService;
         this.appProperties = appProperties;
     }
 
@@ -46,9 +48,9 @@ public class TcpDeviceGateway implements SmartLifecycle {
             serverSocket = new ServerSocket(appProperties.tcp().port());
             running = true;
             acceptExecutor.submit(this::acceptLoop);
-            log.info("TCP 장비 연동 게이트웨이 시작됨. 포트: {}", appProperties.tcp().port());
+            log.info("TCP device gateway started on port {}", appProperties.tcp().port());
         } catch (IOException exception) {
-            throw new IllegalStateException("TCP 장비 게이트웨이 서버를 시작할 수 없습니다.", exception);
+            throw new IllegalStateException("TCP device gateway could not start.", exception);
         }
     }
 
@@ -59,11 +61,11 @@ public class TcpDeviceGateway implements SmartLifecycle {
                 clientExecutor.submit(() -> handleClient(socket));
             } catch (SocketException exception) {
                 if (running) {
-                    log.warn("TCP 접속 대기 루프가 중단되었습니다.", exception);
+                    log.warn("TCP accept loop stopped unexpectedly.", exception);
                 }
             } catch (IOException exception) {
                 if (running) {
-                    log.warn("TCP 클라이언트 접속 요청 처리에 실패했습니다.", exception);
+                    log.warn("TCP client accept failed.", exception);
                 }
             }
         }
@@ -76,23 +78,44 @@ public class TcpDeviceGateway implements SmartLifecycle {
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))
         ) {
             String sourceIp = socket.getInetAddress().getHostAddress();
+            StringBuilder messageBuffer = new StringBuilder();
             String line;
 
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) {
+                    flushMessage(messageBuffer, sourceIp, writer);
                     continue;
                 }
 
-                DeviceInterfaceService.DeviceEventView saved = deviceInterfaceService.ingest(line, sourceIp);
-                writer.write(saved.ackCode());
-                writer.newLine();
-                writer.flush();
+                messageBuffer.append(line).append('\n');
+                if (!messageBuffer.toString().startsWith("MSH|")) {
+                    flushMessage(messageBuffer, sourceIp, writer);
+                }
             }
+            flushMessage(messageBuffer, sourceIp, writer);
         } catch (IOException exception) {
-            log.debug("TCP 클라이언트 연결이 해제되었습니다.", exception);
+            log.debug("TCP client disconnected.", exception);
         } catch (Exception exception) {
-            log.warn("TCP 클라이언트 요청 처리 중 오류가 발생했습니다.", exception);
+            log.warn("TCP client request failed.", exception);
         }
+    }
+
+    private void flushMessage(StringBuilder messageBuffer, String sourceIp, BufferedWriter writer) throws IOException {
+        String payload = messageBuffer.toString().trim();
+        messageBuffer.setLength(0);
+        if (payload.isBlank()) {
+            return;
+        }
+
+        if (payload.startsWith("MSH|")) {
+            EmrInterfaceService.RegisterObservationResultResponse response = emrInterfaceService.register(payload);
+            writer.write(response.ackMessage());
+        } else {
+            DeviceInterfaceService.DeviceEventView saved = deviceInterfaceService.ingest(payload, sourceIp);
+            writer.write(saved.ackCode());
+        }
+        writer.newLine();
+        writer.flush();
     }
 
     @Override
@@ -104,7 +127,7 @@ public class TcpDeviceGateway implements SmartLifecycle {
                 serverSocket.close();
             }
         } catch (IOException exception) {
-            log.warn("TCP 서버 소켓 종료에 실패했습니다.", exception);
+            log.warn("TCP server socket close failed.", exception);
         }
 
         acceptExecutor.shutdownNow();

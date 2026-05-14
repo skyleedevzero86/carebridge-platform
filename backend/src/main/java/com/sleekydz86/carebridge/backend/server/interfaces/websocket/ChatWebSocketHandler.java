@@ -11,6 +11,7 @@ import com.sleekydz86.carebridge.backend.global.security.AuthenticatedUserPrinci
 import com.sleekydz86.carebridge.backend.server.application.auth.AuthService;
 import com.sleekydz86.carebridge.backend.server.application.chat.ChatService;
 import com.sleekydz86.carebridge.backend.server.application.device.DeviceRealtimeEvent;
+import com.sleekydz86.carebridge.backend.server.application.emr.Hl7RealtimeEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -106,6 +107,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @EventListener
     public void onDeviceRealtimeEvent(DeviceRealtimeEvent event) {
         broadcast("DEVICE_EVENT", event.view());
+    }
+
+    @EventListener
+    public void onHl7RealtimeEvent(Hl7RealtimeEvent event) {
+        broadcast("HL7_MESSAGE", event.view());
     }
 
     private AuthenticatedUserPrincipal authenticate(URI uri) {
