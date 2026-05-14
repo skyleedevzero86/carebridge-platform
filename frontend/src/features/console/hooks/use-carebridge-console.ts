@@ -191,7 +191,7 @@ export function useCarebridgeConsole() {
       setLastResponse(response);
       await refreshConsole(token, response.patientNo ?? selectedPatientNo);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "HL7 send failed.");
+      setError(submitError instanceof Error ? submitError.message : "HL7 전송에 실패했습니다.");
     } finally {
       setBusy(false);
     }
@@ -206,7 +206,7 @@ export function useCarebridgeConsole() {
       setLastResponse(response);
       await refreshConsole(token, response.patientNo ?? selectedPatientNo);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Simulation failed.");
+      setError(submitError instanceof Error ? submitError.message : "시뮬레이션에 실패했습니다.");
     } finally {
       setBusy(false);
     }

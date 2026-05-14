@@ -54,31 +54,31 @@ export async function refreshSession(token: string): Promise<RefreshSessionResul
 
 export async function listPatients(token: string): Promise<Patient[]> {
   const response = await fetch(`${API_BASE_URL}/api/patients`, { cache: "no-store", headers: authHeaders(token) });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "Failed to load patients."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "환자 목록을 불러오지 못했습니다."));
   return response.json();
 }
 
 export async function getPatient(token: string, patientNo: string): Promise<PatientDetail> {
   const response = await fetch(`${API_BASE_URL}/api/patients/${patientNo}`, { cache: "no-store", headers: authHeaders(token) });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "Failed to load patient detail."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "환자 상세를 불러오지 못했습니다."));
   return response.json();
 }
 
 export async function listExamOrders(token: string): Promise<ExamOrder[]> {
   const response = await fetch(`${API_BASE_URL}/api/exam-orders`, { cache: "no-store", headers: authHeaders(token) });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "Failed to load exam orders."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "검사 오더를 불러오지 못했습니다."));
   return response.json();
 }
 
 export async function listHl7Logs(token: string): Promise<Hl7MessageLog[]> {
   const response = await fetch(`${API_BASE_URL}/api/interface/hl7/messages`, { cache: "no-store", headers: authHeaders(token) });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "Failed to load HL7 logs."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "HL7 로그를 불러오지 못했습니다."));
   return response.json();
 }
 
 export async function listDevices(token: string): Promise<MedicalDevice[]> {
   const response = await fetch(`${API_BASE_URL}/api/devices`, { cache: "no-store", headers: authHeaders(token) });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "Failed to load devices."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "의료기기 목록을 불러오지 못했습니다."));
   return response.json();
 }
 
@@ -88,7 +88,7 @@ export async function sendRawHl7(token: string, rawMessage: string): Promise<Reg
     headers: authHeaders(token, "text/plain"),
     body: rawMessage,
   });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "HL7 receive failed."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "HL7 수신 처리에 실패했습니다."));
   return response.json();
 }
 
@@ -98,6 +98,6 @@ export async function simulateHl7(token: string, payload: Record<string, string>
     headers: authHeaders(token),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "HL7 simulation failed."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "HL7 시뮬레이션에 실패했습니다."));
   return response.json();
 }

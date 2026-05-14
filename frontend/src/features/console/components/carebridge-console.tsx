@@ -3,13 +3,19 @@
 import { useCarebridgeConsole, type MenuKey } from "@/features/console/hooks/use-carebridge-console";
 
 const MENU_ITEMS: { key: MenuKey; label: string }[] = [
-  { key: "patients", label: "Patients" },
-  { key: "orders", label: "Exam Orders" },
-  { key: "results", label: "Results" },
-  { key: "hl7-logs", label: "HL7 Logs" },
-  { key: "devices", label: "Devices" },
-  { key: "simulator", label: "Simulator" },
+  { key: "patients", label: "환자" },
+  { key: "orders", label: "검사 오더" },
+  { key: "results", label: "검사 결과" },
+  { key: "hl7-logs", label: "HL7 로그" },
+  { key: "devices", label: "의료기기" },
+  { key: "simulator", label: "시뮬레이터" },
 ];
+
+const SOCKET_STATE_LABEL: Record<"DISCONNECTED" | "CONNECTING" | "CONNECTED", string> = {
+  DISCONNECTED: "끊김",
+  CONNECTING: "연결 중",
+  CONNECTED: "연결됨",
+};
 
 function formatTime(value: string | null | undefined) {
   if (!value) return "-";
@@ -28,18 +34,18 @@ export function CarebridgeConsole() {
     return (
       <main className="emrLogin">
         <section className="emrLoginPanel">
-          <h1>CareBridge EMR Interface Server</h1>
+          <h1>CareBridge EMR 인터페이스 서버</h1>
           <p>HL7 ORU^R01 검사결과를 환자와 검사오더에 매칭하는 운영 콘솔입니다.</p>
           <form onSubmit={(event) => { event.preventDefault(); void state.submitLogin(); }}>
             <label>
-              Username
+              아이디
               <input value={state.loginForm.username} onChange={(event) => state.setLoginForm((current) => ({ ...current, username: event.target.value }))} />
             </label>
             <label>
-              Password
+              비밀번호
               <input type="password" value={state.loginForm.password} onChange={(event) => state.setLoginForm((current) => ({ ...current, password: event.target.value }))} />
             </label>
-            <button disabled={state.busy} type="submit">{state.busy ? "Signing in..." : "Sign in"}</button>
+            <button disabled={state.busy} type="submit">{state.busy ? "로그인 중…" : "로그인"}</button>
           </form>
           {state.error ? <p className="emrError">{state.error}</p> : null}
         </section>
@@ -52,7 +58,7 @@ export function CarebridgeConsole() {
       <aside className="emrSidebar">
         <div className="emrBrand">
           <strong>CareBridge</strong>
-          <span>EMR Interface</span>
+          <span>EMR 인터페이스</span>
         </div>
         <nav>
           {MENU_ITEMS.map((item) => (
@@ -67,12 +73,12 @@ export function CarebridgeConsole() {
         <header className="emrTopbar">
           <div>
             <h1>{MENU_ITEMS.find((item) => item.key === state.activeMenu)?.label}</h1>
-            <p>TCP 9093, REST /api/interface/hl7/messages, WebSocket {state.socketState}</p>
+            <p>TCP 9093 · REST HL7 수신 · 웹소켓 {SOCKET_STATE_LABEL[state.socketState]}</p>
           </div>
           <div className="emrActions">
             <span>{state.currentUser.displayName}</span>
-            <button onClick={() => void state.refreshConsole()}>Refresh</button>
-            <button onClick={() => void state.signOut()}>Sign out</button>
+            <button onClick={() => void state.refreshConsole()}>새로고침</button>
+            <button onClick={() => void state.signOut()}>로그아웃</button>
           </div>
         </header>
 
@@ -81,10 +87,10 @@ export function CarebridgeConsole() {
         {state.activeMenu === "patients" ? (
           <div className="emrGrid two">
             <section className="emrPanel">
-              <h2>Patient List</h2>
+              <h2>환자 목록</h2>
               <table>
                 <thead>
-                  <tr><th>No</th><th>Name</th><th>Birth</th><th>Gender</th><th>Results</th><th>Last</th></tr>
+                  <tr><th>환자번호</th><th>이름</th><th>생년월일</th><th>성별</th><th>결과 건수</th><th>최근 수신</th></tr>
                 </thead>
                 <tbody>
                   {state.patients.map((patient) => (
@@ -101,9 +107,9 @@ export function CarebridgeConsole() {
 
         {state.activeMenu === "orders" ? (
           <section className="emrPanel">
-            <h2>Exam Orders</h2>
+            <h2>검사 오더</h2>
             <table>
-              <thead><tr><th>Order</th><th>Patient</th><th>Exam</th><th>Status</th><th>Ordered</th><th>Completed</th></tr></thead>
+              <thead><tr><th>오더번호</th><th>환자</th><th>검사</th><th>상태</th><th>오더 시각</th><th>완료 시각</th></tr></thead>
               <tbody>
                 {state.orders.map((order) => (
                   <tr key={order.orderNo}><td>{order.orderNo}</td><td>{order.patientNo}</td><td>{order.examCode} / {order.examName}</td><td><span className={`status ${order.status.toLowerCase()}`}>{order.status}</span></td><td>{formatTime(order.orderedAt)}</td><td>{formatTime(order.completedAt)}</td></tr>
@@ -117,7 +123,7 @@ export function CarebridgeConsole() {
 
         {state.activeMenu === "hl7-logs" ? (
           <section className="emrPanel">
-            <h2>HL7 Message Logs</h2>
+            <h2>HL7 메시지 로그</h2>
             <div className="logList">
               {state.hl7Logs.map((log) => (
                 <article key={log.messageControlId} className="logCard">
@@ -134,9 +140,9 @@ export function CarebridgeConsole() {
 
         {state.activeMenu === "devices" ? (
           <section className="emrPanel">
-            <h2>Medical Devices</h2>
+            <h2>의료기기</h2>
             <table>
-              <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Endpoint</th><th>Status</th><th>Last</th></tr></thead>
+              <thead><tr><th>코드</th><th>이름</th><th>유형</th><th>엔드포인트</th><th>상태</th><th>최근 연결</th></tr></thead>
               <tbody>
                 {state.devices.map((device) => (
                   <tr key={device.deviceCode}><td>{device.deviceCode}</td><td>{device.deviceName}</td><td>{device.deviceType}</td><td>{device.ip}:{device.port}</td><td>{device.status}</td><td>{formatTime(device.lastConnectedAt)}</td></tr>
@@ -149,14 +155,14 @@ export function CarebridgeConsole() {
         {state.activeMenu === "simulator" ? (
           <div className="emrGrid two">
             <section className="emrPanel">
-              <h2>Fake ECG Device</h2>
+              <h2>가상 심전도 장비</h2>
               <textarea value={state.rawHl7} onChange={(event) => state.setRawHl7(event.target.value)} />
-              <button onClick={() => void state.submitRawHl7()} disabled={state.busy}>Send REST HL7</button>
-              <button onClick={() => void state.submitSimulation()} disabled={state.busy}>Generate and Send ECG</button>
+              <button onClick={() => void state.submitRawHl7()} disabled={state.busy}>REST로 HL7 전송</button>
+              <button onClick={() => void state.submitSimulation()} disabled={state.busy}>ECG 샘플 생성·전송</button>
             </section>
             <section className="emrPanel">
-              <h2>ACK / API Response</h2>
-              {state.lastResponse ? <pre>{JSON.stringify(state.lastResponse, null, 2)}</pre> : <p className="muted">No response yet.</p>}
+              <h2>HL7 ACK 및 API 응답</h2>
+              {state.lastResponse ? <pre>{JSON.stringify(state.lastResponse, null, 2)}</pre> : <p className="muted">아직 응답이 없습니다.</p>}
             </section>
           </div>
         ) : null}
@@ -169,7 +175,7 @@ function PatientDetailPanel({ state, resultsOnly = false }: { state: ReturnType<
   const detail = state.patientDetail;
   return (
     <section className="emrPanel">
-      <h2>{resultsOnly ? "Observation Results" : "Patient Detail"}</h2>
+      <h2>{resultsOnly ? "검사 결과" : "환자 상세"}</h2>
       {detail ? (
         <>
           {!resultsOnly ? (
@@ -189,13 +195,13 @@ function PatientDetailPanel({ state, resultsOnly = false }: { state: ReturnType<
             {detail.observationResults.map((result) => (
               <article key={result.id}>
                 <strong>{result.observationCode}: {result.value} {result.unit}</strong>
-                <span>{result.observationName} / Ref {result.referenceRange} / Flag {result.abnormalFlag}</span>
+                <span>{result.observationName} / 참고 {result.referenceRange} / 플래그 {result.abnormalFlag}</span>
                 <span>{result.deviceCode} / {formatTime(result.createdAt)} / {result.messageControlId}</span>
               </article>
             ))}
           </div>
         </>
-      ) : <p className="muted">Select a patient.</p>}
+      ) : <p className="muted">환자를 선택하세요.</p>}
     </section>
   );
 }

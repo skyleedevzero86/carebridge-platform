@@ -44,7 +44,6 @@ export function useWorkItemBoard(token: string) {
   useEffect(() => {
     if (!token) return;
     void refresh(sortBy);
-    
   }, [sortBy, token]);
 
   function changeSort(nextSort: WorkItemSort) {
