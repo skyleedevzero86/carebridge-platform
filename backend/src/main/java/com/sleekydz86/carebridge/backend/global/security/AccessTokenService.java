@@ -57,12 +57,12 @@ public class AccessTokenService {
     public String reissue(String expiredOrNearlyExpiredToken) {
 
         if (expiredOrNearlyExpiredToken == null || expiredOrNearlyExpiredToken.isBlank()) {
-            throw unauthorized();
+            throw invalidToken();
         }
 
         String[] parts = expiredOrNearlyExpiredToken.split("\\.");
         if (parts.length != 3) {
-            throw unauthorized();
+            throw invalidToken();
         }
 
         try {
@@ -73,7 +73,7 @@ public class AccessTokenService {
                     expectedSignature.getBytes(StandardCharsets.UTF_8),
                     parts[2].getBytes(StandardCharsets.UTF_8)
             )) {
-                throw unauthorized();
+                throw invalidToken();
             }
 
             Map<String, Object> payload = objectMapper.readValue(DECODER.decode(parts[1]), new TypeReference<>() {});
@@ -100,18 +100,18 @@ public class AccessTokenService {
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw unauthorized();
+            throw invalidToken();
         }
     }
 
     public AuthenticatedUserPrincipal parse(String token) {
         if (token == null || token.isBlank()) {
-            throw unauthorized();
+            throw invalidToken();
         }
 
         String[] parts = token.split("\\.");
         if (parts.length != 3) {
-            throw unauthorized();
+            throw invalidToken();
         }
 
         try {
@@ -120,14 +120,14 @@ public class AccessTokenService {
 
 
             if (!MessageDigest.isEqual(expectedSignature.getBytes(StandardCharsets.UTF_8), parts[2].getBytes(StandardCharsets.UTF_8))) {
-                throw unauthorized();
+                throw invalidToken();
             }
 
             Map<String, Object> payload = objectMapper.readValue(DECODER.decode(parts[1]), new TypeReference<>() {});
 
             long expiresAt = ((Number) payload.get("exp")).longValue();
             if (Instant.now().isAfter(Instant.ofEpochSecond(expiresAt))) {
-                throw unauthorized();
+                throw tokenExpired();
             }
 
             return new AuthenticatedUserPrincipal(
@@ -139,7 +139,7 @@ public class AccessTokenService {
         } catch (ResponseStatusException exception) {
             throw exception;
         } catch (Exception exception) {
-            throw unauthorized();
+            throw invalidToken();
         }
     }
 
@@ -149,7 +149,11 @@ public class AccessTokenService {
         return ENCODER.encodeToString(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
     }
 
-    private ResponseStatusException unauthorized() {
-        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "인증 토큰이 유효하지 않습니다.");
+    private ResponseStatusException invalidToken() {
+        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "인증 토큰이 올바르지 않습니다.");
+    }
+
+    private ResponseStatusException tokenExpired() {
+        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인 세션이 만료되었습니다. 다시 로그인해 주세요.");
     }
 }

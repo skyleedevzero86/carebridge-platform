@@ -22,6 +22,7 @@ import {
   login,
   logout,
   me,
+  refreshSession,
   sendRawHl7,
   simulateHl7,
 } from "@/features/console/repository/carebridge-api";
@@ -99,17 +100,32 @@ export function useCarebridgeConsole() {
   }, [token]);
 
   useEffect(() => {
-    if (!token) return;
-    void Promise.all([me(token), refreshConsole(token)]).then(([user]) => {
-      setCurrentUser(user);
-    }).catch((loadError) => {
-      setError(loadError instanceof Error ? loadError.message : "Initial load failed.");
-      setToken(null);
-    });
-  }, [token]);
+    if (!token) {
+      setCurrentUser(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const user = await me(token);
+        if (cancelled) return;
+        setCurrentUser(user);
+        await refreshConsole(token);
+        setError(null);
+      } catch (loadError) {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : "세션을 불러오지 못했습니다.");
+        setToken(null);
+        setCurrentUser(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, refreshConsole]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !currentUser) return;
     const socket = new WebSocket(`${WS_BASE_URL}?token=${encodeURIComponent(token)}`);
     wsRef.current = socket;
     setSocketState("CONNECTING");
@@ -124,7 +140,20 @@ export function useCarebridgeConsole() {
       }
     };
     return () => socket.close();
-  }, [token]);
+  }, [token, currentUser]);
+
+  useEffect(() => {
+    if (!token || !currentUser) return;
+    const intervalId = window.setInterval(() => {
+      void refreshSession(token)
+        .then((result) => setToken(result.accessToken))
+        .catch(() => {
+          setToken(null);
+          setCurrentUser(null);
+        });
+    }, 10 * 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [token, currentUser]);
 
   const submitLogin = async () => {
     setBusy(true);
@@ -134,7 +163,7 @@ export function useCarebridgeConsole() {
       setToken(response.accessToken);
       setCurrentUser(response.user);
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Login failed.");
+      setError(loginError instanceof Error ? loginError.message : "로그인에 실패했습니다.");
     } finally {
       setBusy(false);
     }

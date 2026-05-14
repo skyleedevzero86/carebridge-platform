@@ -96,15 +96,15 @@ public class EmrInterfaceController {
     }
 
     public record SimulateHl7Request(
-            @NotBlank String messageControlId,
-            @NotBlank String deviceCode,
-            @NotBlank String patientNo,
-            @NotBlank String orderNo,
-            @NotBlank String examCode,
-            @NotBlank String examName,
-            @NotBlank String observationCode,
-            @NotBlank String observationName,
-            @NotBlank String value,
+            @NotBlank(message = "메시지 제어 ID를 입력해 주세요.") String messageControlId,
+            @NotBlank(message = "장비 코드를 입력해 주세요.") String deviceCode,
+            @NotBlank(message = "환자 번호를 입력해 주세요.") String patientNo,
+            @NotBlank(message = "오더 번호를 입력해 주세요.") String orderNo,
+            @NotBlank(message = "검사 코드를 입력해 주세요.") String examCode,
+            @NotBlank(message = "검사명을 입력해 주세요.") String examName,
+            @NotBlank(message = "관찰 항목 코드를 입력해 주세요.") String observationCode,
+            @NotBlank(message = "관찰 항목명을 입력해 주세요.") String observationName,
+            @NotBlank(message = "결과 값을 입력해 주세요.") String value,
             String unit,
             String referenceRange,
             String abnormalFlag

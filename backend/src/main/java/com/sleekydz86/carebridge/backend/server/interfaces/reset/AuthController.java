@@ -74,13 +74,16 @@ public class AuthController {
     }
 
     public record RegisterRequest(
-            @NotBlank @Size(min = 3, max = 30) String username,
-            @NotBlank @Size(min = 2, max = 20) String displayName,
-            @NotBlank @Size(min = 8, max = 40) String password
+            @NotBlank(message = "아이디를 입력해 주세요.")
+            @Size(min = 3, max = 30, message = "아이디는 3자 이상 30자 이하여야 합니다.") String username,
+            @NotBlank(message = "이름을 입력해 주세요.")
+            @Size(min = 2, max = 20, message = "이름은 2자 이상 20자 이하여야 합니다.") String displayName,
+            @NotBlank(message = "비밀번호를 입력해 주세요.")
+            @Size(min = 8, max = 40, message = "비밀번호는 8자 이상 40자 이하여야 합니다.") String password
     ) {}
     public record LoginRequest(
-            @NotBlank String username,
-            @NotBlank String password
+            @NotBlank(message = "아이디를 입력해 주세요.") String username,
+            @NotBlank(message = "비밀번호를 입력해 주세요.") String password
     ) {}
     public record RefreshResult(String accessToken, boolean refreshed)  {}
 }

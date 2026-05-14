@@ -8,6 +8,14 @@ public record AppProperties(Cors cors, Security security, Tcp tcp, Simulator sim
     public record Cors(List<String> allowedOrigins)  {}
     public record Security(String tokenSecret, long tokenExpirationMinutes, long tokenRefreshThresholdMinutes)  {}
     public record Tcp(int port)  {}
-    public record Simulator(boolean enabled, String host, int port, long intervalMillis, long initialDelayMillis)  {}
+    public record Simulator(
+            boolean enabled,
+            String host,
+            int port,
+            long intervalMillis,
+            long initialDelayMillis,
+            long connectTimeoutMillis,
+            long readTimeoutMillis
+    ) {}
     public record Pagination(int chatPageSize, int deviceEventPageSize)  {}
 }

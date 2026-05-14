@@ -49,5 +49,5 @@ public class ChatController {
         return principal;
     }
 
-    public record SendMessageRequest(@NotBlank String content) {}
+    public record SendMessageRequest(@NotBlank(message = "메시지 내용을 입력해 주세요.") String content) {}
 }

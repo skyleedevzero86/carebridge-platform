@@ -48,9 +48,9 @@ public class TcpDeviceGateway implements SmartLifecycle {
             serverSocket = new ServerSocket(appProperties.tcp().port());
             running = true;
             acceptExecutor.submit(this::acceptLoop);
-            log.info("TCP device gateway started on port {}", appProperties.tcp().port());
+            log.info("TCP 장비 게이트웨이가 포트 {}에서 시작되었습니다.", appProperties.tcp().port());
         } catch (IOException exception) {
-            throw new IllegalStateException("TCP device gateway could not start.", exception);
+            throw new IllegalStateException("TCP 장비 게이트웨이를 시작할 수 없습니다.", exception);
         }
     }
 
@@ -61,11 +61,11 @@ public class TcpDeviceGateway implements SmartLifecycle {
                 clientExecutor.submit(() -> handleClient(socket));
             } catch (SocketException exception) {
                 if (running) {
-                    log.warn("TCP accept loop stopped unexpectedly.", exception);
+                    log.warn("TCP accept 루프가 예기치 않게 중단되었습니다.", exception);
                 }
             } catch (IOException exception) {
                 if (running) {
-                    log.warn("TCP client accept failed.", exception);
+                    log.warn("TCP 클라이언트 접속 수락에 실패했습니다.", exception);
                 }
             }
         }
@@ -77,6 +77,7 @@ public class TcpDeviceGateway implements SmartLifecycle {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))
         ) {
+            socket.setTcpNoDelay(true);
             String sourceIp = socket.getInetAddress().getHostAddress();
             StringBuilder messageBuffer = new StringBuilder();
             String line;
@@ -94,9 +95,9 @@ public class TcpDeviceGateway implements SmartLifecycle {
             }
             flushMessage(messageBuffer, sourceIp, writer);
         } catch (IOException exception) {
-            log.debug("TCP client disconnected.", exception);
+            log.debug("TCP 클라이언트 연결이 끊어졌습니다.", exception);
         } catch (Exception exception) {
-            log.warn("TCP client request failed.", exception);
+            log.warn("TCP 클라이언트 요청 처리에 실패했습니다.", exception);
         }
     }
 
@@ -127,7 +128,7 @@ public class TcpDeviceGateway implements SmartLifecycle {
                 serverSocket.close();
             }
         } catch (IOException exception) {
-            log.warn("TCP server socket close failed.", exception);
+            log.warn("TCP 서버 소켓을 닫는 데 실패했습니다.", exception);
         }
 
         acceptExecutor.shutdownNow();

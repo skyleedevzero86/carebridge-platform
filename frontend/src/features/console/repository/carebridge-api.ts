@@ -30,7 +30,7 @@ export async function login(username: string, password: string): Promise<AuthRes
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "Login failed."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "로그인에 실패했습니다."));
   return response.json();
 }
 
@@ -40,7 +40,15 @@ export async function logout(token: string): Promise<void> {
 
 export async function me(token: string): Promise<MemberPresence> {
   const response = await fetch(`${API_BASE_URL}/api/auth/me`, { cache: "no-store", headers: authHeaders(token) });
-  if (!response.ok) throw new Error(await parseErrorMessage(response, "Failed to load current user."));
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "사용자 정보를 불러오지 못했습니다."));
+  return response.json();
+}
+
+export type RefreshSessionResult = { accessToken: string; refreshed: boolean };
+
+export async function refreshSession(token: string): Promise<RefreshSessionResult> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, { method: "POST", headers: authHeaders(token) });
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "세션을 갱신하지 못했습니다."));
   return response.json();
 }
 

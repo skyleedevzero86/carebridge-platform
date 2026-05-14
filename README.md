@@ -4,7 +4,7 @@
 
 <br/>
 <br/>
-의료 장비·게이트웨이에서 들어오는 TCP 메시지를 수신·해석·저장하고, 운영자 콘솔에서 실시간 채팅·접속자·장비 이벤트를 한 화면에서 볼 수 있게 만든 풀스택 샘플 프로젝트 입니다.
+의료 장비·게이트웨이에서 들어오는 TCP 메시지를 수신·해석·저장하고, **HL7 ORU^R01** 스타일 검사 결과를 환자·검사오더와 매칭해 적재하며, 운영자 콘솔에서 실시간 채팅·접속자·장비 이벤트·HL7 처리 로그를 한 화면에서 볼 수 있게 만든 풀스택 샘플 프로젝트입니다.
 <br/>
 <br/>
 
@@ -20,10 +20,10 @@
 
 <br/>
 
-| 구분 | 기술 |
-|------|------|
-| Backend | Java 21, **Spring Boot 4**, Spring Security (JWT), Spring Data JPA, Spring Data Redis, Spring WebSocket, Spring Validation, Spring Actuator, Lombok, PostgreSQL, 커스텀 TCP 게이트웨이 |
-| Frontend | **Next.js 16** (App Router), **React 19**, TypeScript, Space Grotesk + Noto Sans KR, pnpm |
+| 구분     | 기술                                                                                                                                                                                   |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend  | Java 21, **Spring Boot 4**, Spring Security (JWT), Spring Data JPA, Spring Data Redis, Spring WebSocket, Spring Validation, Spring Actuator, Lombok, PostgreSQL, 커스텀 TCP 게이트웨이 |
+| Frontend | **Next.js 16** (App Router), **React 19**, TypeScript, Space Grotesk + Noto Sans KR, pnpm                                                                                              |
 
 ---
 
@@ -38,15 +38,17 @@
 7. [API 명세](#api-명세)
 8. [WebSocket 프로토콜](#websocket-프로토콜)
 9. [TCP 디바이스 프로토콜](#tcp-디바이스-프로토콜)
-10. [저장소 구조](#저장소-구조)
-11. [사전 요구 사항](#사전-요구-사항)
-12. [빠른 시작](#빠른-시작)
-13. [포트 정리](#포트-정리)
-14. [환경 변수](#환경-변수)
-15. [내장 장비 시뮬레이터](#내장-장비-시뮬레이터)
-16. [TCP 수동 테스트](#tcp-수동-테스트)
-17. [보안·운영 참고](#보안운영-참고)
-18. [라이선스 / 면책](#라이선스--면책)
+10. [EMR·HL7 인터페이스](#emrhl7-인터페이스)
+11. [저장소 구조](#저장소-구조)
+12. [사전 요구 사항](#사전-요구-사항)
+13. [빠른 시작](#빠른-시작)
+14. [포트 정리](#포트-정리)
+15. [환경 변수](#환경-변수)
+16. [내장 장비 시뮬레이터](#내장-장비-시뮬레이터)
+17. [실시간 데이터 흐름](#실시간-데이터-흐름)
+18. [TCP 수동 테스트](#tcp-수동-테스트)
+19. [보안·운영 참고](#보안운영-참고)
+20. [라이선스 / 면책](#라이선스--면책)
 
 ---
 
@@ -55,7 +57,7 @@
 병원·검사실 환경에서는 EMR만 쓰는 것이 아니라, 장비 전용 프로토콜(TCP, 키-밸류, HL7 스타일 등)으로 들어오는 데이터를 중간 계층에서 받아 정리해야 하는 경우가 많습니다.<br/>
 이 프로젝트는 그 흐름을 단순화해 보여 주기 위해
 
-- 동일한 수신 경로로 실제 TCP 클라이언트와 내장 시뮬레이터 트래픽을 처리하고
+- **동일 TCP 포트**에서 키-밸류·단순 HL7 라인은 장비 이벤트로, **`MSH`로 시작하는 HL7 배치**는 EMR 파이프라인(환자·오더 검증 → 검사결과 저장 → ACK)으로 분기하고
 - 수신 결과를 **PostgreSQL에 영속화**한 뒤
 - **WebSocket**으로 대시보드에 푸시하는
 
@@ -65,34 +67,41 @@
 
 ## 핵심 기능
 
-1. **장비 인터페이스 (TCP)**  
-   - 별도 포트 (`9093` 기본)에서 TCP 접속을 받고, 페이로드를 해석한 뒤 ACK를 반환합니다.  
-   - **키-밸류 파이프(`|`) 형식**과 **HL7 스타일** 두 가지 인터프리터를 지원하며, 인터페이스(`DevicePayloadInterpreter`) 구현만으로 확장할 수 있습니다.
+1. **장비 인터페이스 (TCP)**
+   - 별도 포트 (`9093` 기본)에서 TCP 접속을 받고, 페이로드를 해석한 뒤 한 줄 ACK(또는 HL7 ACK 문자열)를 반환합니다.
+   - 페이로드가 **`MSH|`로 시작**하면 `EmrInterfaceService`로 전달되어 ORU^R01 처리·DB 반영 후 **HL7 ACK**가 응답됩니다. 그 외는 기존처럼 **키-밸류 파이프(`|`)**와 **장비용 HL7 스타일** 인터프리터(`DevicePayloadInterpreter`) 체인으로 `device_event`에 적재됩니다.
+   - HL7 배치는 줄 단위로 버퍼링되다가 **빈 줄**을 만나면 플러시되며, `MSH`가 아닌 메시지는 라인 단위로도 플러시됩니다.
    - 가상 스레드 (`Executors.newVirtualThreadPerTaskExecutor`) 기반 비동기 클라이언트 처리.
 
-2. **저장 및 개요 API**  
+2. **저장 및 개요 API**
    - 장비 이벤트를 JPA로 저장하고, 최근 25건·총 건수·마지막 수신 시각 등을 REST로 제공합니다.
 
-3. **실시간 운영 콘솔 (Next.js)**  
-   - 로그인/회원가입 후 JWT Bearer 토큰으로 보호된 REST API 호출.  
-   - WebSocket (`/ws/chat`)으로 채팅 메시지, 접속자 목록 갱신, **신규 장비 이벤트 브로드캐스트**를 수신합니다.
+3. **실시간 운영 콘솔 (Next.js)**
+   - 로그인/회원가입 후 JWT Bearer 토큰으로 보호된 REST API 호출.
+   - WebSocket (`/ws/chat`)으로 채팅 메시지, 접속자 목록 갱신, **신규 장비 이벤트**, **HL7 메시지 로그 갱신**(`HL7_MESSAGE`)을 수신합니다.
+   - 환자 목록·상세, 검사오더, HL7 수신 로그, 의료장비 목록, ORU 시뮬레이션 등 EMR 뷰를 콘솔에서 조회합니다.
    - `useEffectEvent`·`startTransition` 등 React 19 신규 API를 적극 활용한 상태 관리.
 
-4. **Presence (접속 상태)**  
+4. **Presence (접속 상태)**
    - Redis 기반 TTL 키(`carebridge:presence:{userId}`, TTL 70초)로 온라인/오프라인을 표시합니다.
    - 클라이언트가 20초마다 PING을 보내 TTL을 갱신합니다.
 
-5. **내장 장비 시뮬레이터**  
+5. **내장 장비 시뮬레이터**
    - 백엔드 기동 후 `initialDelayMillis`(기본 5초) 뒤 `intervalMillis`(기본 7초) 간격으로 로컬 TCP 포트로 샘플 페이로드를 전송합니다.
    - UI 없이도 end-to-end 흐름을 즉시 확인할 수 있습니다.
 
-6. **작업 보드 (Work Items)**  
+6. **작업 보드 (Work Items)**
    - 칸반 스타일 작업 항목 CRUD API (`POST / PATCH / GET /api/work-items`).
    - 목록 조회 결과를 Redis에 5분간 캐싱하고, 생성·상태변경 시 캐시를 자동 무효화합니다.
    - 우선순위(PRIORITY)·최신순(RECENT) 두 가지 정렬 전략을 `WorkItemSorter` 전략 패턴으로 구현.
 
-7. **데모 계정**  
+7. **데모 계정**
    - 최초 기동 시 시드: `admin` / `Admin1234!`, `operator` / `Operator1234!`
+
+8. **EMR·HL7 (ORU^R01)**
+   - 시드 환자 `P0001`, `P0002` 및 검사오더 `ORD-001`, `ORD-002`, 장비 `ECG-001`가 함께 생성됩니다.
+   - HL7 수신 시 환자번호·오더번호를 검증하고, 성공 시 `observation_result` 저장·오더 완료·`hl7_message_log`·감사 로그를 남깁니다.
+   - `POST /api/interface/hl7/messages`(본문 `text/plain`) 또는 TCP로 동일 파이프라인을 탈 수 있습니다.
 
 ---
 
@@ -109,18 +118,19 @@ flowchart TB
         direction TB
 
         subgraph ingest["TCP 수신 계층"]
-            TCP_GW["TcpDeviceGateway\n(SmartLifecycle · 가상 스레드)"]
+            TCP_GW["TcpDeviceGateway\n(SmartLifecycle · 가상 스레드)\nMSH| → EMR / 그 외 → 장비"]
         end
 
         subgraph app["애플리케이션 서비스"]
             AUTH_SVC["AuthService\n+ PresenceService"]
             DEV_SVC["DeviceInterfaceService"]
+            EMR_SVC["EmrInterfaceService\n(HL7 파싱·적재)"]
             CHAT_SVC["ChatService"]
             WI_SVC["WorkItemService\n(Redis 캐시)"]
         end
 
         subgraph iface["인터페이스 계층"]
-            REST["REST Controllers\n/api/**"]
+        REST["REST Controllers\n(/api/**, EmrInterfaceController)"]
             WS_HANDLER["ChatWebSocketHandler\n/ws/chat"]
         end
 
@@ -142,14 +152,17 @@ flowchart TB
     end
 
     TCP_CLIENT["TCP 장비 / 시뮬레이터\n:9093"] -->|raw payload| TCP_GW
-    TCP_GW -->|ingest| DEV_SVC
+    TCP_GW -->|비 MSH| DEV_SVC
+    TCP_GW -->|MSH HL7 batch| EMR_SVC
     DEV_SVC -->|ApplicationEvent| WS_HANDLER
     DEV_SVC --> DB
+    EMR_SVC --> DB
+    EMR_SVC -->|Hl7RealtimeEvent| WS_HANDLER
 
     UI -->|HTTP REST + JWT| REST
     UI <-->|WebSocket + JWT token| WS_HANDLER
 
-    REST --> AUTH_SVC & DEV_SVC & CHAT_SVC & WI_SVC
+    REST --> AUTH_SVC & DEV_SVC & EMR_SVC & CHAT_SVC & WI_SVC
     WS_HANDLER --> AUTH_SVC & CHAT_SVC
 
     AUTH_SVC --> DB
@@ -162,7 +175,7 @@ flowchart TB
     JWT -.->|URI token| WS_HANDLER
 ```
 
-**한 줄 요약:** TCP → 파싱·저장(PostgreSQL) → Spring ApplicationEvent → WebSocket 브로드캐스트로 콘솔 실시간 갱신.
+**한 줄 요약:** TCP에서 비 HL7 장비 페이로드는 파싱·저장(`device_event`) → `DeviceRealtimeEvent` → WebSocket `DEVICE_EVENT`. `MSH` HL7 배치는 EMR 서비스에서 검증·적재 → `Hl7RealtimeEvent` → WebSocket `HL7_MESSAGE`.
 
 ---
 
@@ -173,13 +186,13 @@ flowchart TB
 ```mermaid
 graph LR
     subgraph interfaces["interfaces (어댑터)"]
-        REST_C["REST Controllers"]
+        REST_C["REST (interfaces.reset)"]
         WS_H["WebSocket Handler"]
     end
 
     subgraph application["application (유스케이스 + JPA Entity + Repository)"]
-        SVC["Service 클래스\n(AuthService, DeviceInterfaceService,\n ChatService, WorkItemService)"]
-        ENT["JPA Entities\n(UserEntity, DeviceEventEntity,\n ChatMessageEntity, WorkItemEntity)"]
+        SVC["Service 클래스\n(AuthService, DeviceInterfaceService,\n EmrInterfaceService, ChatService, WorkItemService)"]
+        ENT["JPA Entities\n(UserEntity, DeviceEventEntity,\n PatientEntity, ExamOrderEntity, …)"]
         REPO["Spring Data JPA Repositories"]
     end
 
@@ -198,65 +211,126 @@ graph LR
     config -.-> application & interfaces
 ```
 
-| 패키지 | 역할 |
-|--------|------|
-| `interfaces.rest` | HTTP 컨트롤러, 요청·응답 DTO (inner record) |
-| `interfaces.websocket` | WebSocket 핸들러, 메시지 라우팅, 이벤트 브로드캐스트 |
-| `application.{auth,device,chat,workitem}` | 유스케이스 서비스, JPA Entity, JPA Repository |
-| `domain.{auth,device,chat,workitem}` | 순수 도메인 Record, 팩토리, Interpreter, Sorter |
-| `config` | Spring 설정 빈 (Security, CORS, WebSocket, ConfigurationProperties) |
-| `security` | JWT 발급·파싱, 인증 필터, UserPrincipal |
+| 패키지                                        | 역할                                                                                                  |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `interfaces.reset`                            | HTTP 컨트롤러 (`/api/auth`, `/api/device-interface`, EMR `/api/patients` 등), `@RestControllerAdvice` |
+| `interfaces.websocket`                        | WebSocket 핸들러, 메시지 라우팅, 이벤트 브로드캐스트                                                  |
+| `application.{auth,device,emr,chat,workitem}` | 유스케이스 서비스, JPA Entity, JPA Repository                                                         |
+| `domain.{auth,device,chat,workitem}`          | 순수 도메인 Record, 팩토리, Interpreter, Sorter                                                       |
+| `config`                                      | Spring 설정 빈 (Security, CORS, WebSocket, ConfigurationProperties)                                   |
+| `security`                                    | JWT 발급·파싱, 인증 필터, UserPrincipal                                                               |
 
 ---
 
 ## ERD (데이터 모델)
 
-PostgreSQL에 생성되는 4개 테이블의 관계입니다.
+PostgreSQL에는 운영 코어 테이블과 EMR 인터페이스용 테이블이 함께 생성됩니다.
+
+### 운영 코어 (채팅·장비 이벤트·작업 보드)
 
 ```mermaid
 erDiagram
     APP_USER {
         UUID id PK
-        VARCHAR username UK "UNIQUE NOT NULL max40"
-        VARCHAR display_name "NOT NULL max60"
-        VARCHAR password_hash "NOT NULL max120"
-        VARCHAR role "ADMIN or OPERATOR max20"
-        TIMESTAMP created_at "NOT NULL"
+        VARCHAR username UK
+        VARCHAR display_name
+        VARCHAR password_hash
+        VARCHAR role
+        TIMESTAMP created_at
     }
     CHAT_MESSAGE {
         UUID id PK
-        UUID sender_id "NOT NULL ref APP_USER id"
-        VARCHAR sender_name "NOT NULL max60"
-        VARCHAR sender_role "ADMIN or OPERATOR max20"
-        TEXT content "NOT NULL"
-        TIMESTAMP sent_at "NOT NULL"
+        UUID sender_id
+        VARCHAR sender_name
+        VARCHAR sender_role
+        TEXT content
+        TIMESTAMP sent_at
     }
     DEVICE_EVENT {
         UUID id PK
-        VARCHAR device_code "NOT NULL max80"
-        VARCHAR protocol "KEY_VALUE or HL7 max20"
-        VARCHAR patient_code "NULLABLE max80"
-        VARCHAR summary "NOT NULL max255"
-        TEXT payload "NOT NULL"
-        VARCHAR source_ip "NOT NULL max80"
-        VARCHAR ack_code "NOT NULL max40"
-        TIMESTAMP received_at "NOT NULL"
+        VARCHAR device_code
+        VARCHAR protocol
+        VARCHAR patient_code
+        VARCHAR summary
+        TEXT payload
+        VARCHAR source_ip
+        VARCHAR ack_code
+        TIMESTAMP received_at
     }
     WORK_ITEMS {
-        UUID id PK "manual assign"
-        VARCHAR title "NOT NULL max80"
-        VARCHAR description "NOT NULL max1000"
-        VARCHAR status "TODO or IN_PROGRESS or DONE"
-        VARCHAR priority "LOW or MEDIUM or HIGH or CRITICAL"
-        TIMESTAMP created_at "NOT NULL"
-        TIMESTAMP updated_at "NOT NULL"
+        UUID id PK
+        VARCHAR title
+        VARCHAR description
+        VARCHAR status
+        VARCHAR priority
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
     }
     APP_USER ||--o{ CHAT_MESSAGE : sends
 ```
 
-    
+### EMR·HL7 (`patient`, `exam_order`, `observation_result`, …)
 
-> **참고:** `CHAT_MESSAGE.sender_id`는 JPA `@Column`으로 선언된 논리적 외래키이며, DB 레벨 FK constraint는 선언하지 않았습니다. `ddl-auto: update` 설정으로 애플리케이션 기동 시 테이블이 자동 생성/보완됩니다.
+```mermaid
+erDiagram
+    PATIENT {
+        UUID id PK
+        VARCHAR patient_no UK
+        VARCHAR name
+        VARCHAR birth_date
+        VARCHAR gender
+        TIMESTAMP created_at
+    }
+    EXAM_ORDER {
+        UUID id PK
+        VARCHAR order_no UK
+        UUID patient_id FK
+        VARCHAR exam_code
+        VARCHAR exam_name
+        VARCHAR status
+        TIMESTAMP ordered_at
+        TIMESTAMP completed_at
+    }
+    OBSERVATION_RESULT {
+        UUID id PK
+        UUID patient_id FK
+        UUID order_id FK
+        VARCHAR message_control_id
+        VARCHAR device_code
+        VARCHAR observation_code
+        VARCHAR value
+        TIMESTAMP observed_at
+    }
+    HL7_MESSAGE_LOG {
+        UUID id PK
+        VARCHAR message_control_id UK
+        VARCHAR process_status
+        TEXT raw_message
+        TEXT ack_message
+        TIMESTAMP received_at
+    }
+    MEDICAL_DEVICE {
+        UUID id PK
+        VARCHAR device_code UK
+        VARCHAR device_name
+        VARCHAR ip
+        INT port
+        VARCHAR status
+    }
+    AUDIT_LOG {
+        UUID id PK
+        VARCHAR action_type
+        VARCHAR entity_key
+        VARCHAR entity_value
+        VARCHAR actor
+        TIMESTAMP created_at
+    }
+    PATIENT ||--o{ EXAM_ORDER : has
+    PATIENT ||--o{ OBSERVATION_RESULT : has
+    EXAM_ORDER ||--o{ OBSERVATION_RESULT : produces
+```
+
+> **참고:** `CHAT_MESSAGE.sender_id` 등은 JPA `@JoinColumn`/`@Column` 수준의 연관이며, DB 레벨 FK constraint는 일부 생략될 수 있습니다. `ddl-auto: update` 설정으로 애플리케이션 기동 시 테이블이 자동 생성·보완됩니다.
 
 ---
 
@@ -271,9 +345,9 @@ graph LR
     end
 ```
 
-| Key 패턴 | 용도 | TTL |
-|----------|------|-----|
-| `carebridge:presence:{userId}` | 사용자 온라인 상태 | 70초 (PING으로 갱신) |
+| Key 패턴                           | 용도               | TTL                      |
+| ---------------------------------- | ------------------ | ------------------------ |
+| `carebridge:presence:{userId}`     | 사용자 온라인 상태 | 70초 (PING으로 갱신)     |
 | `carebridge:work-items:{sortType}` | WorkItem 목록 캐시 | 5분 (write 시 자동 삭제) |
 
 ---
@@ -282,14 +356,15 @@ graph LR
 
 ### 인증 (`/api/auth`)
 
-| Method | Path | 인증 | 설명 |
-|--------|------|------|------|
-| `POST` | `/api/auth/register` | X | 회원가입. `username(3-30)`, `displayName(2-20)`, `password(8-40)` |
-| `POST` | `/api/auth/login` | X | 로그인. Bearer 토큰 반환. |
-| `GET` | `/api/auth/me` | O | 현재 로그인 사용자 정보 |
-| `POST` | `/api/auth/logout` | O | 로그아웃 (Presence 해제) |
+| Method | Path                 | 인증 | 설명                                                              |
+| ------ | -------------------- | ---- | ----------------------------------------------------------------- |
+| `POST` | `/api/auth/register` | X    | 회원가입. `username(3-30)`, `displayName(2-20)`, `password(8-40)` |
+| `POST` | `/api/auth/login`    | X    | 로그인. Bearer 토큰 반환.                                         |
+| `GET`  | `/api/auth/me`       | O    | 현재 로그인 사용자 정보                                           |
+| `POST` | `/api/auth/logout`   | O    | 로그아웃 (Presence 해제)                                          |
 
 **응답 예시 (로그인/회원가입):**
+
 ```json
 {
   "accessToken": "eyJ...",
@@ -307,18 +382,18 @@ graph LR
 
 ### 사용자 Presence (`/api/users`)
 
-| Method | Path | 인증 | 설명 |
-|--------|------|------|------|
-| `GET` | `/api/users/presence` | O | 전체 멤버 + 온라인 상태 목록 |
-| `POST` | `/api/users/presence/ping` | O | Presence TTL 갱신 (20초마다 호출) |
+| Method | Path                       | 인증 | 설명                              |
+| ------ | -------------------------- | ---- | --------------------------------- |
+| `GET`  | `/api/users/presence`      | O    | 전체 멤버 + 온라인 상태 목록      |
+| `POST` | `/api/users/presence/ping` | O    | Presence TTL 갱신 (20초마다 호출) |
 
 ---
 
 ### 채팅 (`/api/chat`)
 
-| Method | Path | 인증 | 설명 |
-|--------|------|------|------|
-| `GET` | `/api/chat/messages` | O | 최근 채팅 메시지 목록 (최대 50건) |
+| Method | Path                 | 인증 | 설명                              |
+| ------ | -------------------- | ---- | --------------------------------- |
+| `GET`  | `/api/chat/messages` | O    | 최근 채팅 메시지 목록 (최대 50건) |
 
 > 채팅 **전송**은 WebSocket(`CHAT` 타입 메시지)으로만 가능합니다.
 
@@ -326,13 +401,15 @@ graph LR
 
 ### 장비 인터페이스 (`/api/device-interface`)
 
-| Method | Path | 인증 | 설명 |
-|--------|------|------|------|
-| `GET` | `/api/device-interface/overview` | O | TCP 포트·총 메시지 수·마지막 수신 시각·시뮬레이터 상태 |
-| `GET` | `/api/device-interface/events` | O | 최근 장비 이벤트 25건 |
-| `POST` | `/api/device-interface/simulate` | O ADMIN | 페이로드 직접 인젝션 (시뮬레이션) |
+| Method | Path                                 | 인증    | 설명                                                     |
+| ------ | ------------------------------------ | ------- | -------------------------------------------------------- |
+| `GET`  | `/api/device-interface/overview`     | O       | TCP 포트·총 메시지 수·마지막 수신 시각·시뮬레이터 상태   |
+| `GET`  | `/api/device-interface/events`       | O       | 최근 장비 이벤트 25건                                    |
+| `POST` | `/api/device-interface/simulate`     | O ADMIN | 키-밸류·장비용 HL7 페이로드 직접 인젝션 (`device_event`) |
+| `POST` | `/api/device-interface/simulate/hl7` | O       | JSON으로 ORU^R01 템플릿 생성 후 EMR 파이프라인 실행      |
 
 **DeviceOverview 응답:**
+
 ```json
 {
   "tcpPort": 9093,
@@ -344,6 +421,7 @@ graph LR
 ```
 
 **DeviceEvent 응답:**
+
 ```json
 {
   "id": "...",
@@ -362,11 +440,30 @@ graph LR
 
 ### 작업 보드 (`/api/work-items`)
 
-| Method | Path | 인증 | 설명 |
-|--------|------|------|------|
-| `POST` | `/api/work-items` | O | 작업 항목 생성 |
-| `GET` | `/api/work-items?sortBy=RECENT` | O | 목록 조회 (`RECENT` \| `PRIORITY`) |
-| `PATCH` | `/api/work-items/{id}/status` | O | 상태 변경 (`TODO`→`IN_PROGRESS`→`DONE`) |
+| Method  | Path                            | 인증 | 설명                                    |
+| ------- | ------------------------------- | ---- | --------------------------------------- |
+| `POST`  | `/api/work-items`               | O    | 작업 항목 생성                          |
+| `GET`   | `/api/work-items?sortBy=RECENT` | O    | 목록 조회 (`RECENT` \| `PRIORITY`)      |
+| `PATCH` | `/api/work-items/{id}/status`   | O    | 상태 변경 (`TODO`→`IN_PROGRESS`→`DONE`) |
+
+---
+
+### EMR·HL7 (`/api/patients`, `/api/exam-orders`, `/api/interface/hl7`, `/api/devices`)
+
+| Method | Path                                             | 인증 | 설명                                                     |
+| ------ | ------------------------------------------------ | ---- | -------------------------------------------------------- |
+| `GET`  | `/api/patients`                                  | O    | 환자 목록                                                |
+| `GET`  | `/api/patients/{patientNo}`                      | O    | 환자 상세(오더·검사결과 포함)                            |
+| `GET`  | `/api/exam-orders`                               | O    | 전체 검사오더                                            |
+| `GET`  | `/api/patients/{patientNo}/exam-orders`          | O    | 환자별 검사오더                                          |
+| `GET`  | `/api/patients/{patientNo}/observation-results`  | O    | 환자별 검사결과                                          |
+| `GET`  | `/api/exam-orders/{orderNo}/observation-results` | O    | 오더별 검사결과                                          |
+| `GET`  | `/api/devices`                                   | O    | 의료장비 목록                                            |
+| `GET`  | `/api/interface/hl7/messages`                    | O    | HL7 수신 로그 최근 50건                                  |
+| `GET`  | `/api/interface/hl7/messages/{messageControlId}` | O    | 단건 로그                                                |
+| `POST` | `/api/interface/hl7/messages`                    | O    | 본문 `text/plain` 원문 HL7 수신·ACK 메타데이터 JSON 응답 |
+
+`RegisterObservationResultResponse`에는 `messageControlId`, `status`(`SUCCESS`/`FAILED`), `savedResultCount`, 오류 시 `errorCode`/`message`, 그리고 **`ackMessage`**(TCP 응답으로 그대로 쓰는 HL7 ACK 문자열)가 포함됩니다.
 
 ---
 
@@ -395,18 +492,23 @@ sequenceDiagram
     Note over S: TCP 장비 이벤트 수신
     S-->>C: DEVICE_EVENT { deviceCode, protocol, summary, ... }
     Note over S,C: 연결된 모든 클라이언트에 브로드캐스트
+
+    Note over S: HL7 EMR 처리(성공·실패 로그)
+    S-->>C: HL7_MESSAGE { messageControlId, processStatus, ... }
+    Note over S,C: 연결된 모든 클라이언트에 브로드캐스트
 ```
 
 **서버 → 클라이언트 메시지 타입:**
 
-| type | 설명 |
-|------|------|
-| `CONNECTED` | 연결 성공, 현재 사용자 정보 포함 |
-| `PRESENCE_SNAPSHOT` | 전체 멤버 온라인 상태 목록 |
-| `CHAT_MESSAGE` | 새 채팅 메시지 브로드캐스트 |
-| `DEVICE_EVENT` | 새 장비 이벤트 브로드캐스트 |
-| `PONG` | PING 응답 |
-| `ERROR` | 오류 메시지 |
+| type                | 설명                                                   |
+| ------------------- | ------------------------------------------------------ |
+| `CONNECTED`         | 연결 성공, 현재 사용자 정보 포함                       |
+| `PRESENCE_SNAPSHOT` | 전체 멤버 온라인 상태 목록                             |
+| `CHAT_MESSAGE`      | 새 채팅 메시지 브로드캐스트                            |
+| `DEVICE_EVENT`      | 새 장비 이벤트 브로드캐스트 (`device_event`)           |
+| `HL7_MESSAGE`       | HL7 로그 적재·갱신 브로드캐스트 (`hl7_message_log` 뷰) |
+| `PONG`              | PING 응답                                              |
+| `ERROR`             | 오류 메시지                                            |
 
 ---
 
@@ -435,139 +537,65 @@ OBX|1|NM|GLUCOSE^Glucose||5.6|mmol/L|3.5-7.8|N
 - `PID[3]` → `patientCode`
 - `OBX[5]` → `summary`
 
-두 인터프리터는 `@Order` 어노테이션으로 우선순위 설정: **HL7(1) → Key-Value(2)**.
+두 인터프리터는 `@Order` 어노테이션으로 우선순위 설정: **HL7(1) → Key-Value(2)**. 단, TCP로 들어온 메시지 **전체가 `MSH|`로 시작**하면 위 인터프리터를 거치지 않고 **EMR 서비스**로 보내져 `patient` / `exam_order` 검증 후 `observation_result`에 저장됩니다.
+
+### EMR용 HL7 (ORU^R01, TCP·HTTP 공통)
+
+- **지원 메시지:** `ORU^R01` (파서가 `MSH`·`PID`·`OBR`·`OBX`에서 환자·오더·검사값을 추출합니다.)
+- **전제:** 시드 또는 사전 등록된 `patient.patient_no`와 `exam_order.order_no`가 존재하고, 오더가 취소 상태가 아니어야 합니다. 데모 데이터 예: 환자 `P0001` / 오더 `ORD-001`.
+- **중복:** 동일 `messageControlId`는 거절(`DUPLICATE_MESSAGE`)됩니다.
+- **TCP 응답:** 성공·실패 모두 `ackMessage` 문자열이 한 줄 이상으로 기록되며, 게이트웨이가 소켓으로 그대로 flush 합니다.
+- **HTTP:** `POST /api/interface/hl7/messages`에 `Content-Type: text/plain`으로 원문을 넣으면 동일 처리·JSON 응답을 받습니다.
+
+---
+
+## EMR·HL7 인터페이스
+
+요약하면 **검사 장비 → (TCP 또는 HTTP) → HL7 파싱 → DB 반영 → ACK → WebSocket `HL7_MESSAGE`** 흐름입니다. 장비 시뮬레이터가 보내는 짧은 HL7 한 줄은 여전히 `device_event`용 인터프리터가 처리할 수 있으나, **멀티라인 `MSH` 배치**는 EMR 쪽으로 분기됩니다.
 
 ---
 
 ## 저장소 구조
 
 ```
-carebridgeplatform2/
+carebridge-platform/
 ├── README.md
-│
-├── backend/                              # Spring Boot 4 (HTTP :8080 + TCP :9093)
-│   ├── build.gradle.kts                  # 빌드 설정 (Java 21, Spring Boot 4.0.4)
-│   ├── settings.gradle.kts
+├── backend/                                 # Spring Boot 4 — HTTP :8080, TCP :9093
+│   ├── build.gradle.kts
 │   ├── gradlew / gradlew.bat
-│   └── src/main/
-│       ├── resources/
-│       │   └── application.yml          # 설정 (DB, Redis, JWT, TCP, 시뮬레이터)
-│       └── java/com/intel3/carebridge/server/
-│           ├── CarebridgeServerApplication.java   # @SpringBootApplication 진입점
-│           ├── config/
-│           │   ├── AppProperties.java             # @ConfigurationProperties(prefix="app")
-│           │   ├── DemoDataInitializer.java        # 시드 계정 생성
-│           │   ├── SecurityConfig.java            # Spring Security + JWT 필터
-│           │   ├── WebConfig.java                 # CORS 설정
-│           │   └── WebSocketConfig.java           # WebSocket 등록
-│           ├── security/
-│           │   ├── AccessTokenService.java        # JWT 발급·파싱
-│           │   ├── AuthenticatedUserPrincipal.java
-│           │   └── TokenAuthenticationFilter.java
-│           ├── domain/
-│           │   ├── auth/
-│           │   │   ├── UserAccount.java           # 도메인 Record
-│           │   │   ├── UserAccountFactory.java
-│           │   │   └── UserRole.java              # ADMIN | OPERATOR
-│           │   ├── device/
-│           │   │   ├── DeviceEvent.java           # 도메인 Record
-│           │   │   ├── DeviceEventFactory.java
-│           │   │   ├── DeviceProtocol.java        # KEY_VALUE | HL7
-│           │   │   ├── DevicePayloadInterpreter.java   # 인터페이스
-│           │   │   ├── KeyValuePayloadInterpreter.java # @Order(2)
-│           │   │   ├── Hl7PayloadInterpreter.java      # @Order(1)
-│           │   │   └── InterpretedDevicePayload.java
-│           │   ├── chat/
-│           │   │   ├── ChatMessage.java
-│           │   │   └── ChatMessageFactory.java
-│           │   └── workitem/
-│           │       ├── WorkItem.java              # 도메인 Record (불변)
-│           │       ├── WorkItemFactory.java
-│           │       ├── WorkItemStatus.java        # TODO | IN_PROGRESS | DONE
-│           │       ├── WorkItemPriority.java      # LOW | MEDIUM | HIGH | CRITICAL
-│           │       ├── WorkItemSortType.java      # RECENT | PRIORITY
-│           │       ├── WorkItemSorter.java        # 전략 인터페이스
-│           │       ├── RecentWorkItemSorter.java
-│           │       ├── PriorityWorkItemSorter.java
-│           │       └── WorkItemNotFoundException.java
-│           ├── application/
-│           │   ├── auth/
-│           │   │   ├── AuthService.java           # 회원가입·로그인·Presence
-│           │   │   ├── PresenceService.java        # Redis TTL 기반 온라인 상태
-│           │   │   ├── UserEntity.java             # JPA @Entity (app_user)
-│           │   │   └── UserJpaRepository.java
-│           │   ├── device/
-│           │   │   ├── DeviceInterfaceService.java  # 인제스트·조회·개요
-│           │   │   ├── DeviceEventEntity.java       # JPA @Entity (device_event)
-│           │   │   ├── DeviceEventJpaRepository.java
-│           │   │   ├── DeviceRealtimeEvent.java     # Spring ApplicationEvent
-│           │   │   ├── TcpDeviceGateway.java        # SmartLifecycle TCP 서버
-│           │   │   ├── DeviceSimulationScheduler.java
-│           │   │   └── DeviceSimulationPayloadFactory.java
-│           │   ├── chat/
-│           │   │   ├── ChatService.java
-│           │   │   ├── ChatMessageEntity.java        # JPA @Entity (chat_message)
-│           │   │   └── ChatMessageJpaRepository.java
-│           │   └── workitem/
-│           │       ├── WorkItemService.java          # Redis 캐시 포함 CRUD
-│           │       ├── WorkItemEntity.java           # JPA @Entity (work_items)
-│           │       ├── WorkItemJpaRepository.java
-│           │       └── WorkItemBoardView.java
-│           └── interfaces/
-│               ├── rest/
-│               │   ├── AuthController.java           # POST /api/auth/**
-│               │   ├── UserController.java           # GET/POST /api/users/**
-│               │   ├── ChatController.java           # GET /api/chat/messages
-│               │   ├── DeviceInterfaceController.java # /api/device-interface/**
-│               │   ├── WorkItemController.java        # /api/work-items/**
-│               │   └── GlobalExceptionHandler.java   # @RestControllerAdvice
-│               └── websocket/
-│                   └── ChatWebSocketHandler.java      # /ws/chat TextWebSocketHandler
+│   └── src/main/java/com/sleekydz86/carebridge/backend/
+│       ├── BackendApplication.java          # 진입점
+│       ├── global/config/                   # Security, WebSocket, DemoDataInitializer, AppProperties …
+│       ├── global/security/                 # JWT, TokenAuthenticationFilter …
+│       ├── server/domain/                   # 순수 도메인 (auth, device, chat, workitem)
+│       ├── server/application/
+│       │   ├── auth/ | device/ | chat/ | workitem/
+│       │   └── emr/                         # EMR·HL7: EmrInterfaceService, 파서, 엔티티, 리포지토리
+│       └── server/interfaces/
+│           ├── reset/                       # REST 컨트롤러 (Auth, Device, WorkItem, Chat, User …)
+│           ├── reset/emr/EmrInterfaceController.java
+│           └── websocket/ChatWebSocketHandler.java
 │
-└── web/                                  # Next.js 16 운영자 UI
-    ├── package.json                       # next 16.2.0, react 19.2.4, typescript
-    ├── next.config.ts
-    ├── tsconfig.json
-    ├── .env.example
+└── frontend/                                # Next.js 16 (App Router)
+    ├── package.json
     └── src/
-        ├── app/                           # App Router 루트
-        │   ├── layout.tsx                 # Space Grotesk + Noto Sans KR 폰트
-        │   ├── page.tsx                   # → CarebridgeConsole 렌더링
-        │   ├── globals.css                # CSS 변수 + 글로벌 스타일 (Glassmorphism)
-        │   └── favicon.ico
-        ├── features/
-        │   ├── console/                   # 메인 운영 콘솔 기능
-        │   │   ├── components/
-        │   │   │   └── carebridge-console.tsx  # 로그인·콘솔 단일 페이지 컴포넌트
-        │   │   ├── hooks/
-        │   │   │   └── use-carebridge-console.ts  # 전체 상태·WebSocket·API 관리
-        │   │   ├── model/
-        │   │   │   └── carebridge.ts       # TypeScript 타입 정의
-        │   │   └── repository/
-        │   │       └── carebridge-api.ts   # fetch 기반 API 클라이언트
-        │   └── work-items/                # 작업 보드 기능 모듈
-        │       ├── components/
-        │       │   └── work-item-board.tsx
-        │       ├── hooks/
-        │       │   └── use-work-item-board.ts
-        │       ├── model/
-        │       │   └── work-item.ts
-        │       └── repository/
-        │           └── http-work-item-repository.ts
-        └── public/
+        ├── app/                             # layout, page, globals.css
+        └── features/
+            ├── console/                     # 운영 콘솔 (로그인, 채팅, 장비, EMR 뷰, WebSocket)
+            └── work-items/                  # 작업 보드
 ```
 
 ---
 
 ## 사전 요구 사항
 
-| 항목 | 버전 / 설정 |
-|------|------------|
-| JDK | **21** (Gradle 툴체인과 일치) |
+| 항목       | 버전 / 설정                                          |
+| ---------- | ---------------------------------------------------- |
+| JDK        | **21** (Gradle 툴체인과 일치)                        |
 | PostgreSQL | 호스트 `localhost`, 포트 **`5433`**, DB `carebridge` |
-| Redis | `localhost:9379`, 비밀번호 `123456` |
-| Node.js | LTS 20+ |
-| pnpm | `npm install -g pnpm` |
+| Redis      | `localhost:9379`, 비밀번호 `123456`                  |
+| Node.js    | LTS 20+                                              |
+| pnpm       | `npm install -g pnpm`                                |
 
 ---
 
@@ -575,19 +603,19 @@ carebridgeplatform2/
 
 ### 1) 백엔드
 
-```powershell
-cd D:\intel3\carebridgeplatform2\backend
+```linux
+cd root\carebridge-platform\backend
 .\gradlew.bat bootRun
 ```
 
-- HTTP API: `http://localhost:8080`  
+- HTTP API: `http://localhost:8080`
 - TCP 장비 수신: `localhost:9093` (동일 JVM 프로세스)
 - 시작 약 5초 후 내장 시뮬레이터가 자동으로 장비 메시지를 전송합니다.
 
 ### 2) 프론트엔드
 
-```powershell
-cd D:\intel3\carebridgeplatform2\web
+```linux
+cd root\carebridge-platform\frontend
 pnpm install
 pnpm dev
 ```
@@ -606,13 +634,13 @@ pnpm dev
 
 ## 포트 정리
 
-| 포트 | 용도 |
-|------|------|
-| `3000` | Next.js 개발 서버 |
-| `5433` | PostgreSQL |
+| 포트   | 용도                                               |
+| ------ | -------------------------------------------------- |
+| `3000` | Next.js 개발 서버                                  |
+| `5433` | PostgreSQL                                         |
 | `8080` | Spring Boot (REST, Actuator, WebSocket 업그레이드) |
-| `9093` | TCP 장비 메시지 수신 (기본값) |
-| `9379` | Redis |
+| `9093` | TCP 장비 메시지 수신 (기본값)                      |
+| `9379` | Redis                                              |
 
 포트 확인 (PowerShell):
 
@@ -624,31 +652,31 @@ Get-NetTCPConnection -LocalPort 8080,9093 -State Listen
 
 ## 환경 변수
 
-| 환경 변수 | 기본값 | 설명 |
-|-----------|--------|------|
-| `POSTGRES_HOST` | `localhost` | PostgreSQL 호스트 |
-| `POSTGRES_PORT` | `5433` | PostgreSQL 포트 |
-| `POSTGRES_DB` | `carebridge` | DB 이름 |
-| `POSTGRES_USERNAME` | `postgres` | DB 사용자 |
-| `POSTGRES_PASSWORD` | `postgres` | DB 비밀번호 |
-| `REDIS_HOST` | `localhost` | Redis 호스트 |
-| `REDIS_PORT` | `9379` | Redis 포트 |
-| `REDIS_PASSWORD` | `123456` | Redis 비밀번호 |
-| `APP_TOKEN_SECRET` | *(기본값)* | **프로덕션 필수 교체** JWT 서명 키 |
-| `SERVER_PORT` | `8080` | HTTP 서버 포트 |
-| `TCP_SERVER_PORT` | `9093` | TCP 수신 포트 |
-| `DEVICE_SIMULATOR_ENABLED` | `true` | 시뮬레이터 활성화 |
-| `DEVICE_SIMULATOR_HOST` | `127.0.0.1` | 시뮬레이터 타겟 호스트 |
-| `DEVICE_SIMULATOR_PORT` | `9093` | 시뮬레이터 타겟 포트 |
-| `DEVICE_SIMULATOR_INTERVAL_MILLIS` | `7000` | 메시지 전송 간격 (ms) |
-| `DEVICE_SIMULATOR_INITIAL_DELAY_MILLIS` | `5000` | 최초 전송 지연 (ms) |
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | 프론트 → 백엔드 REST 주소 |
-| `NEXT_PUBLIC_WS_BASE_URL` | `ws://localhost:8080/ws/chat` | 프론트 → 백엔드 WS 주소 |
+| 환경 변수                               | 기본값                        | 설명                               |
+| --------------------------------------- | ----------------------------- | ---------------------------------- |
+| `POSTGRES_HOST`                         | `localhost`                   | PostgreSQL 호스트                  |
+| `POSTGRES_PORT`                         | `5433`                        | PostgreSQL 포트                    |
+| `POSTGRES_DB`                           | `carebridge`                  | DB 이름                            |
+| `POSTGRES_USERNAME`                     | `postgres`                    | DB 사용자                          |
+| `POSTGRES_PASSWORD`                     | `postgres`                    | DB 비밀번호                        |
+| `REDIS_HOST`                            | `localhost`                   | Redis 호스트                       |
+| `REDIS_PORT`                            | `9379`                        | Redis 포트                         |
+| `REDIS_PASSWORD`                        | `123456`                      | Redis 비밀번호                     |
+| `APP_TOKEN_SECRET`                      | _(기본값)_                    | **프로덕션 필수 교체** JWT 서명 키 |
+| `SERVER_PORT`                           | `8080`                        | HTTP 서버 포트                     |
+| `TCP_SERVER_PORT`                       | `9093`                        | TCP 수신 포트                      |
+| `DEVICE_SIMULATOR_ENABLED`              | `true`                        | 시뮬레이터 활성화                  |
+| `DEVICE_SIMULATOR_HOST`                 | `127.0.0.1`                   | 시뮬레이터 타겟 호스트             |
+| `DEVICE_SIMULATOR_PORT`                 | `9093`                        | 시뮬레이터 타겟 포트               |
+| `DEVICE_SIMULATOR_INTERVAL_MILLIS`      | `7000`                        | 메시지 전송 간격 (ms)              |
+| `DEVICE_SIMULATOR_INITIAL_DELAY_MILLIS` | `5000`                        | 최초 전송 지연 (ms)                |
+| `NEXT_PUBLIC_API_BASE_URL`              | `http://localhost:8080`       | 프론트 → 백엔드 REST 주소          |
+| `NEXT_PUBLIC_WS_BASE_URL`               | `ws://localhost:8080/ws/chat` | 프론트 → 백엔드 WS 주소            |
 
 HTTP 포트를 `8081`, TCP를 `9094`로 변경하는 예:
 
 ```powershell
-cd D:\intel3\carebridgeplatform2\backend
+cd D:\intel3\carebridge-platform\backend
 $env:SERVER_PORT='8081'
 $env:TCP_SERVER_PORT='9094'
 $env:DEVICE_SIMULATOR_PORT='9094'
@@ -659,7 +687,7 @@ $env:DEVICE_SIMULATOR_PORT='9094'
 
 ## 내장 장비 시뮬레이터
 
-기동 약 5초 후 아래 샘플 페이로드들이 순환하며 전송됩니다.
+기동 약 5초 후 아래 샘플 페이로드들이 순환하며 전송됩니다. (키-밸류와 짧은 HL7/ORU 형태가 섞입니다. EMR DB에 매칭되는 `P0001` / `ORD-001` 검증 흐름은 콘솔의 **HL7 시뮬레이션** 또는 `POST /api/interface/hl7/messages`로 확인하는 것이 확실합니다.)
 
 ```
 DEVICE=VITAL-01|PATIENT=P-1001|HEART_RATE=72|SPO2=98|TEMP=36.8|STATUS=STEADY
@@ -669,16 +697,17 @@ MSH|^~\&|HL7-GATEWAY-A|CAREBRIDGE|EMR|HOSPITAL|...  (HL7 스타일)
 ```
 
 시뮬레이터를 끄고 싶으면:
+
 ```powershell
 $env:DEVICE_SIMULATOR_ENABLED='false'
 .\gradlew.bat bootRun
 ```
 
-
-
 ## 실시간 데이터 흐름
 
-실제 장비·수동 TCP 테스트·내장 시뮬레이터가 **같은 파이프라인**을 탑니다.
+### 장비 이벤트 (`device_event`, 비 MSH TCP 페이로드)
+
+키-밸류·장비용 HL7 한 줄 등은 **동일 TCP 포트**에서 `DeviceInterfaceService`로 들어갑니다.
 
 ```mermaid
 sequenceDiagram
@@ -701,13 +730,45 @@ sequenceDiagram
     WS->>UI: DEVICE_EVENT 브로드캐스트 (WebSocket)
 ```
 
+### EMR HL7 (`MSH` 배치 또는 HTTP `text/plain`)
+
+```mermaid
+sequenceDiagram
+    participant SRC as TCP 클라이언트 또는 HTTP 클라이언트
+    participant GW as TcpDeviceGateway / REST
+    participant EMR as EmrInterfaceService
+    participant DB as PostgreSQL
+    participant EVT as ApplicationEventPublisher
+    participant WS as ChatWebSocketHandler
+    participant UI as Next.js 콘솔
+
+    SRC->>GW: ORU^R01 원문 (TCP는 MSH 배치 플러시 시점)
+    GW->>EMR: register(rawMessage)
+    EMR->>DB: patient/order 검증, observation_result, hl7_message_log …
+    EMR->>GW: RegisterObservationResultResponse (ackMessage)
+    GW->>SRC: HL7 ACK 문자열
+    EMR->>EVT: publishEvent(Hl7RealtimeEvent)
+    EVT->>WS: onHl7RealtimeEvent()
+    WS->>UI: HL7_MESSAGE 브로드캐스트 (WebSocket)
+```
+
+---
+
+## TCP 수동 테스트
+
+1. 리스닝 확인: `Get-NetTCPConnection -LocalPort 9093 -State Listen` (PowerShell).
+2. 연결 확인: `Test-NetConnection 127.0.0.1 -Port 9093`.
+3. **키-밸류:** 한 줄 전송 후 서버가 반환하는 짧은 ACK 문자열을 확인합니다.
+4. **EMR HL7:** `MSH|`로 시작하는 메시지는 줄 단위로 버퍼링되므로, 샘플은 세그먼트를 모두 보낸 뒤 **빈 줄**로 배치를 끝내거나 연결을 종료해 플러시합니다. 로그인 토큰이 있다면 `POST /api/interface/hl7/messages`로 동일 본문을 올려 ACK JSON을 확인하는 편이 간단합니다.
+
 ---
 
 ## 보안·운영 참고
 
-- REST API는 **JWT (Bearer)** 기반 stateless 인증입니다.  
-- WebSocket은 연결 URI의 `?token=` 쿼리 파라미터에서 토큰을 추출해 검증합니다.  
-- `POST /api/device-interface/simulate`는 `ROLE_ADMIN`만 호출 가능합니다.  
+- REST API는 **JWT (Bearer)** 기반 stateless 인증입니다. (`/api/auth/**`와 일부 Actuator 경로 제외.)
+- WebSocket은 연결 URI의 `?token=` 쿼리 파라미터에서 토큰을 추출해 검증합니다.
+- `POST /api/device-interface/simulate`는 `ROLE_ADMIN`만 호출 가능합니다. `POST /api/device-interface/simulate/hl7`는 **인증된 사용자**(ADMIN·OPERATOR)면 호출 가능합니다.
+- `POST /api/interface/hl7/messages` 및 EMR 조회 API도 동일하게 **Bearer 토큰**이 필요합니다. 외부 시스템 연동 시 별도 서비스 계정·MLLP·IP 제한 등을 고려하세요.
 - **프로덕션에서는 `APP_TOKEN_SECRET` 등 시크릿을 반드시 교체**하세요.
 - Actuator 엔드포인트 노출 범위: `health`, `info`, `metrics` (기본).
 

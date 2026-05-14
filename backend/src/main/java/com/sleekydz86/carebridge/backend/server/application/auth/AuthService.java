@@ -59,7 +59,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public AuthResult login(String username, String password) {
         UserEntity entity = userJpaRepository.findByUsername(normalizeUsername(username))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "잘못된 아이디 또는 비밀번호입니다."));
 
         if (!passwordEncoder.matches(password, entity.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "잘못된 아이디 또는 비밀번호입니다.");
@@ -72,7 +72,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public UserView me(AuthenticatedUserPrincipal principal) {
         UserEntity entity = userJpaRepository.findById(principal.userId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
         return toView(toDomain(entity));
     }
 

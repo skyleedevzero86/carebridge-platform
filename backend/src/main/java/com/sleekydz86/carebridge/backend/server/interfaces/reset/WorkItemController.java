@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,7 +39,13 @@ public class WorkItemController {
 
     @GetMapping
     public ResponseEntity<WorkItemBoardView> list(@RequestParam(defaultValue = "RECENT") String sortBy) {
-        return ResponseEntity.ok(workItemService.list(WorkItemSortType.valueOf(sortBy.toUpperCase())));
+        WorkItemSortType sortType;
+        try {
+            sortType = WorkItemSortType.valueOf(sortBy.toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 방식입니다.");
+        }
+        return ResponseEntity.ok(workItemService.list(sortType));
     }
 
     @PatchMapping("/{workItemId}/status")
@@ -50,9 +57,10 @@ public class WorkItemController {
     }
 
     public record CreateWorkItemRequest(
-            @NotBlank @Size(max = 80) String title,
-            @Size(max = 1000) String description,
-            @NotNull WorkItemPriority priority
+            @NotBlank(message = "제목을 입력해 주세요.")
+            @Size(max = 80, message = "제목은 80자 이하여야 합니다.") String title,
+            @Size(max = 1000, message = "설명은 1000자 이하여야 합니다.") String description,
+            @NotNull(message = "우선순위를 선택해 주세요.") WorkItemPriority priority
     ) {}
-    public record UpdateWorkItemStatusRequest(@NotNull WorkItemStatus status)  {}
+    public record UpdateWorkItemStatusRequest(@NotNull(message = "상태를 선택해 주세요.") WorkItemStatus status)  {}
 }

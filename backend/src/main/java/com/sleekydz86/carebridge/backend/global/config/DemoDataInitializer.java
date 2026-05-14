@@ -45,9 +45,9 @@ public class DemoDataInitializer implements CommandLineRunner {
         ensureUser("operator", "Operator", "Operator1234!", UserRole.OPERATOR, now);
         PatientEntity p0001 = ensurePatient("P0001", "HONG GILDONG", "1980-01-01", "M", now);
         PatientEntity p0002 = ensurePatient("P0002", "KIM MINA", "1992-05-12", "F", now);
-        ensureExamOrder("ORD-001", p0001, "ECG", "Electrocardiogram", now);
-        ensureExamOrder("ORD-002", p0002, "LAB", "Basic Chemistry", now);
-        ensureDevice("ECG-001", "Fake ECG Device", "ECG", "127.0.0.1", 9093);
+        ensureExamOrder("ORD-001", p0001, "ECG", "심전도", now);
+        ensureExamOrder("ORD-002", p0002, "LAB", "기본 혈액화학", now);
+        ensureDevice("ECG-001", "데모 심전도 장비", "ECG", "127.0.0.1", 9093);
     }
 
     private void ensureUser(String username, String displayName, String password, UserRole role, LocalDateTime createdAt) {
@@ -73,7 +73,7 @@ public class DemoDataInitializer implements CommandLineRunner {
 
     private void ensureDevice(String deviceCode, String deviceName, String deviceType, String ip, int port) {
         if (medicalDeviceJpaRepository.findByDeviceCode(deviceCode).isEmpty()) {
-            medicalDeviceJpaRepository.save(new MedicalDeviceEntity(null, deviceCode, deviceName, deviceType, ip, port, "ONLINE", null));
+            medicalDeviceJpaRepository.save(new MedicalDeviceEntity(null, deviceCode, deviceName, deviceType, ip, port, "온라인", null));
         }
     }
 }
