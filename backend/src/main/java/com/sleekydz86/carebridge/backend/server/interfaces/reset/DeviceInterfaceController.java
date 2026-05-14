@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/device-interface")
 public class DeviceInterfaceController {
-
     private final DeviceInterfaceService deviceInterfaceService;
 
     public DeviceInterfaceController(DeviceInterfaceService deviceInterfaceService) {
@@ -36,9 +35,8 @@ public class DeviceInterfaceController {
     @PostMapping("/simulate")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DeviceInterfaceService.DeviceEventView> simulate(@Valid @RequestBody SimulateDeviceRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(deviceInterfaceService.ingest(request.payload(), "수동콘솔"));
+        return ResponseEntity.status(HttpStatus.CREATED).body(deviceInterfaceService.ingest(request.payload(), "manual-console"));
     }
 
-    public record SimulateDeviceRequest(@NotBlank(message = "페이로드를 입력해 주세요.") String payload)  {}
+    public record SimulateDeviceRequest(@NotBlank String payload) {}
 }

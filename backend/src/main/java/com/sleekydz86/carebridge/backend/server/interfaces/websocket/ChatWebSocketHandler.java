@@ -9,7 +9,7 @@ import com.sleekydz86.carebridge.backend.global.security.AuthenticatedUserPrinci
 import com.sleekydz86.carebridge.backend.server.application.auth.AuthService;
 import com.sleekydz86.carebridge.backend.server.application.chat.ChatService;
 import com.sleekydz86.carebridge.backend.server.application.device.DeviceRealtimeEvent;
-import com.sleekydz86.carebridge.backend.server.application.emr.Hl7RealtimeEvent;
+import com.sleekydz86.carebridge.backend.server.adapter.out.websocket.Hl7RealtimeEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -41,7 +41,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         AuthenticatedUserPrincipal principal = (AuthenticatedUserPrincipal) session.getAttributes().get(WebSocketHandshakeAuthInterceptor.PRINCIPAL_ATTR);
         if (principal == null) {
-            session.close(CloseStatus.NOT_ACCEPTABLE.withReason("웹소켓 인증 정보가 없습니다."));
+            session.close(CloseStatus.NOT_ACCEPTABLE.withReason("?諭?쇠??紐꾩쵄 ?類ｋ궖揶쎛 ??곷뮸??덈뼄."));
             return;
         }
         authService.markOnline(principal);
@@ -65,7 +65,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         if ("PING".equalsIgnoreCase(inboundMessage.type())) {
             authService.refreshPresence(client.principal());
-            sendEnvelope(client.session(), "PONG", Map.of("status", "정상"));
+            sendEnvelope(client.session(), "PONG", Map.of("status", "?類ㅺ맒"));
             return;
         }
 
@@ -75,7 +75,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        sendEnvelope(client.session(), "ERROR", Map.of("message", "지원하지 않는 소켓 메시지 타입입니다."));
+        sendEnvelope(client.session(), "ERROR", Map.of("message", "筌왖?癒곕릭筌왖 ??낅뮉 ???룇 筌롫뗄?놅쭪? ????놁뿯??덈뼄."));
     }
 
     @Override
@@ -130,7 +130,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         try {
             session.sendMessage(new TextMessage(objectMapper.writeValueAsString(new SocketEnvelope(type, payload))));
         } catch (IOException exception) {
-            throw new IllegalStateException("웹소켓 메시지 전송에 실패했습니다.", exception);
+            throw new IllegalStateException("?諭?쇠?筌롫뗄?놅쭪? ?袁⑸꽊????쎈솭??됰뮸??덈뼄.", exception);
         }
     }
 
@@ -140,3 +140,5 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private record SocketEnvelope(String type, Object payload)  {}
 }
+
+

@@ -40,7 +40,6 @@ export function WorkItemBoard({ token }: WorkItemBoardProps) {
 
   return (
     <div className="workItemShell">
-      
       <div className="workItemHeader">
         <div>
           <p className="workItemEyebrow">작업 보드 — Redis 캐시 · PostgreSQL 영속화</p>
