@@ -37,9 +37,6 @@ HL7 ORU^R01 REST 또는 TCP 수신
 6. `GET /api/patients/P0001` 또는 `GET /api/patients/P0001/observation-results` 로 검사결과 확인
 7. `GET /api/interface/hl7/messages` (또는 `GET /api/interface/hl7/messages/{messageControlId}`) 로 HL7 로그·`SUCCESS`/`AA` 확인
 
-### 향후 구조·리팩터링
-
-README 최상단에는 두지 않습니다. 우선순위·구조 개선 메모는 **[docs/ROADMAP.md](docs/ROADMAP.md)** 를 참고하세요.
 
 ---
 
