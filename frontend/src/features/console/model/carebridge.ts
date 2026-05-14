@@ -95,6 +95,15 @@ export type RegisterObservationResultResponse = {
 };
 
 export type SocketEnvelope = {
-  type: "CONNECTED" | "PRESENCE_SNAPSHOT" | "HL7_MESSAGE" | "DEVICE_EVENT" | "PONG" | "ERROR";
+  type: "CONNECTED" | "PRESENCE_SNAPSHOT" | "HL7_MESSAGE" | "CHAT_MESSAGE" | "DEVICE_EVENT" | "PONG" | "ERROR";
   payload: unknown;
+};
+
+export type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: UserRole;
+  content: string;
+  sentAt: string;
 };

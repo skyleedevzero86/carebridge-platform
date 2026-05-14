@@ -1,8 +1,14 @@
 "use client";
 
+import Link from "next/link";
+
+import { ChatPanel } from "@/features/chat/components/chat-panel";
 import { useCarebridgeConsole, type MenuKey } from "@/features/console/hooks/use-carebridge-console";
+import { WorkItemBoard } from "@/features/work-items/components/work-item-board";
 
 const MENU_ITEMS: { key: MenuKey; label: string }[] = [
+  { key: "work-board", label: "작업 보드" },
+  { key: "chat", label: "채팅" },
   { key: "patients", label: "환자" },
   { key: "orders", label: "검사 오더" },
   { key: "results", label: "검사 결과" },
@@ -16,6 +22,21 @@ const SOCKET_STATE_LABEL: Record<"DISCONNECTED" | "CONNECTING" | "CONNECTED", st
   CONNECTING: "연결 중",
   CONNECTED: "연결됨",
 };
+
+const HL7_PROCESS_STATUS_LABEL: Record<string, string> = {
+  SUCCESS: "성공",
+  FAILED: "실패",
+};
+
+function topBarSubline(menu: MenuKey, socketLabel: string): string {
+  if (menu === "work-board") {
+    return "Redis 캐시 · PostgreSQL 작업 항목";
+  }
+  if (menu === "chat") {
+    return `실시간 채팅 · 웹소켓 ${socketLabel}`;
+  }
+  return `TCP 9093 · REST HL7 수신 · 웹소켓 ${socketLabel}`;
+}
 
 function formatTime(value: string | null | undefined) {
   if (!value) return "-";
@@ -56,10 +77,10 @@ export function CarebridgeConsole() {
   return (
     <main className="emrShell">
       <aside className="emrSidebar">
-        <div className="emrBrand">
+        <Link href="/" className="emrBrand" onClick={() => state.resetToHome()}>
           <strong>CareBridge</strong>
           <span>EMR 인터페이스</span>
-        </div>
+        </Link>
         <nav>
           {MENU_ITEMS.map((item) => (
             <button key={item.key} className={state.activeMenu === item.key ? "active" : ""} onClick={() => state.setActiveMenu(item.key)}>
@@ -73,7 +94,7 @@ export function CarebridgeConsole() {
         <header className="emrTopbar">
           <div>
             <h1>{MENU_ITEMS.find((item) => item.key === state.activeMenu)?.label}</h1>
-            <p>TCP 9093 · REST HL7 수신 · 웹소켓 {SOCKET_STATE_LABEL[state.socketState]}</p>
+            <p>{topBarSubline(state.activeMenu, SOCKET_STATE_LABEL[state.socketState])}</p>
           </div>
           <div className="emrActions">
             <span>{state.currentUser.displayName}</span>
@@ -83,6 +104,14 @@ export function CarebridgeConsole() {
         </header>
 
         {state.error ? <p className="emrError">{state.error}</p> : null}
+
+        {state.activeMenu === "work-board" && state.token ? <WorkItemBoard token={state.token} /> : null}
+
+        {state.activeMenu === "chat" ? (
+          <section className="emrPanel chatPanelWrap">
+            <ChatPanel messages={state.chatMessages} onSend={(content) => void state.sendChat(content)} sending={state.chatSending} />
+          </section>
+        ) : null}
 
         {state.activeMenu === "patients" ? (
           <div className="emrGrid two">
@@ -127,7 +156,7 @@ export function CarebridgeConsole() {
             <div className="logList">
               {state.hl7Logs.map((log) => (
                 <article key={log.messageControlId} className="logCard">
-                  <div><strong>{log.messageControlId}</strong><span className={`status ${log.processStatus.toLowerCase()}`}>{log.processStatus}</span></div>
+                  <div><strong>{log.messageControlId}</strong><span className={`status ${log.processStatus.toLowerCase()}`}>{HL7_PROCESS_STATUS_LABEL[log.processStatus] ?? log.processStatus}</span></div>
                   <p>{log.messageType} / {log.deviceCode} / {log.patientNo ?? "-"} / {log.orderNo ?? "-"}</p>
                   {log.errorCode ? <p className="emrError compact">{log.errorCode}: {log.errorMessage}</p> : null}
                   <pre>{log.rawMessage}</pre>

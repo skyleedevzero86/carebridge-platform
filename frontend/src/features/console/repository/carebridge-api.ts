@@ -1,5 +1,6 @@
 import type {
   AuthResponse,
+  ChatMessage,
   ExamOrder,
   Hl7MessageLog,
   MedicalDevice,
@@ -99,5 +100,21 @@ export async function simulateHl7(token: string, payload: Record<string, string>
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(await parseErrorMessage(response, "HL7 시뮬레이션에 실패했습니다."));
+  return response.json();
+}
+
+export async function listChatMessages(token: string, page = 0): Promise<ChatMessage[]> {
+  const response = await fetch(`${API_BASE_URL}/api/chat/messages?page=${page}`, { cache: "no-store", headers: authHeaders(token) });
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "채팅 목록을 불러오지 못했습니다."));
+  return response.json();
+}
+
+export async function sendChatMessage(token: string, content: string): Promise<ChatMessage> {
+  const response = await fetch(`${API_BASE_URL}/api/chat/messages`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ content }),
+  });
+  if (!response.ok) throw new Error(await parseErrorMessage(response, "메시지 전송에 실패했습니다."));
   return response.json();
 }

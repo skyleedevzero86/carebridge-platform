@@ -3,6 +3,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
+  ChatMessage,
   ExamOrder,
   Hl7MessageLog,
   MedicalDevice,
@@ -15,6 +16,7 @@ import type {
 import {
   WS_BASE_URL,
   getPatient,
+  listChatMessages,
   listDevices,
   listExamOrders,
   listHl7Logs,
@@ -23,6 +25,7 @@ import {
   logout,
   me,
   refreshSession,
+  sendChatMessage,
   sendRawHl7,
   simulateHl7,
 } from "@/features/console/repository/carebridge-api";
@@ -33,7 +36,15 @@ PID|||P0001||HONG^GILDONG||19800101|M
 OBR|1|ORD-001||ECG^Electrocardiogram
 OBX|1|NM|HR^Heart Rate||78|bpm|60-100|N|||F`;
 
-export type MenuKey = "patients" | "orders" | "results" | "hl7-logs" | "devices" | "simulator";
+export type MenuKey =
+  | "work-board"
+  | "chat"
+  | "patients"
+  | "orders"
+  | "results"
+  | "hl7-logs"
+  | "devices"
+  | "simulator";
 
 export function useCarebridgeConsole() {
   const [token, setToken] = useState<string | null>(null);
@@ -51,6 +62,8 @@ export function useCarebridgeConsole() {
   const [socketState, setSocketState] = useState<"DISCONNECTED" | "CONNECTING" | "CONNECTED">("DISCONNECTED");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatSending, setChatSending] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   const simulatorForm = useMemo(() => ({
@@ -96,7 +109,10 @@ export function useCarebridgeConsole() {
 
   useEffect(() => {
     if (token) window.localStorage.setItem(STORAGE_KEY, token);
-    else window.localStorage.removeItem(STORAGE_KEY);
+    else {
+      window.localStorage.removeItem(STORAGE_KEY);
+      setChatMessages([]);
+    }
   }, [token]);
 
   useEffect(() => {
@@ -137,10 +153,37 @@ export function useCarebridgeConsole() {
       if (envelope.type === "HL7_MESSAGE") {
         const log = envelope.payload as Hl7MessageLog;
         setHl7Logs((current) => [log, ...current.filter((item) => item.messageControlId !== log.messageControlId)].slice(0, 50));
+        return;
+      }
+      if (envelope.type === "CHAT_MESSAGE") {
+        const message = envelope.payload as ChatMessage;
+        setChatMessages((current) => {
+          if (current.some((item) => item.id === message.id)) {
+            return current;
+          }
+          return [...current, message];
+        });
       }
     };
     return () => socket.close();
   }, [token, currentUser]);
+
+  useEffect(() => {
+    if (!token || activeMenu !== "chat") return;
+    let cancelled = false;
+    void listChatMessages(token, 0)
+      .then((rows) => {
+        if (!cancelled) setChatMessages(rows);
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : "채팅을 불러오지 못했습니다.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, activeMenu]);
 
   useEffect(() => {
     if (!token || !currentUser) return;
@@ -212,9 +255,40 @@ export function useCarebridgeConsole() {
     }
   };
 
+  const resetToHome = useCallback(() => {
+    startTransition(() => {
+      setActiveMenu("patients");
+      setError(null);
+    });
+  }, []);
+
+  const sendChat = useCallback(
+    async (content: string) => {
+      if (!token) return;
+      const ws = wsRef.current;
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "CHAT", content }));
+        return;
+      }
+      setChatSending(true);
+      setError(null);
+      try {
+        const message = await sendChatMessage(token, content);
+        setChatMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]));
+      } catch (sendError) {
+        setError(sendError instanceof Error ? sendError.message : "메시지 전송에 실패했습니다.");
+      } finally {
+        setChatSending(false);
+      }
+    },
+    [token],
+  );
+
   return {
     activeMenu,
     busy,
+    chatMessages,
+    chatSending,
     currentUser,
     devices,
     error,
@@ -230,11 +304,13 @@ export function useCarebridgeConsole() {
     socketState,
     token,
     refreshConsole,
+    resetToHome,
     selectPatient,
     setActiveMenu,
     setLoginForm,
     setRawHl7,
     signOut,
+    sendChat,
     submitLogin,
     submitRawHl7,
     submitSimulation,

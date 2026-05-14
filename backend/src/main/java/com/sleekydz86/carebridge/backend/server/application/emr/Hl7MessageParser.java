@@ -56,12 +56,16 @@ public class Hl7MessageParser {
                 .toList();
 
         String[] exam = component(field(obr, 4));
+        String orderNo = field(obr, 2);
+        if (orderNo.isBlank()) {
+            orderNo = field(obr, 3);
+        }
         return new ParsedHl7Message(
                 field(msh, 9),
                 messageType,
                 blankToDefault(field(msh, 2), "ECG-001"),
                 field(pid, 3),
-                field(obr, 2),
+                orderNo,
                 value(exam, 0),
                 value(exam, 1),
                 observations
