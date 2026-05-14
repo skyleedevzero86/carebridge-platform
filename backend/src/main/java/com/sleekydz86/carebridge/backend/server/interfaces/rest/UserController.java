@@ -1,4 +1,4 @@
-package com.sleekydz86.carebridge.backend.server.interfaces.reset;
+package com.sleekydz86.carebridge.backend.server.interfaces.rest;
 
 import com.sleekydz86.carebridge.backend.global.security.AuthenticatedUserPrincipal;
 import com.sleekydz86.carebridge.backend.server.application.auth.AuthService;
