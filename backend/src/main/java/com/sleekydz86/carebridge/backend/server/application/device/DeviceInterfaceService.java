@@ -53,14 +53,14 @@ public class DeviceInterfaceService {
                 .filter(interpreter -> interpreter.supports(normalizedPayload))
                 .findFirst()
                 .map(interpreter -> interpreter.interpret(normalizedPayload))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported device payload format."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 장비 페이로드 형식입니다."));
 
         DeviceEvent event = DeviceEventFactory.create(interpretedPayload, normalizedPayload, sourceIp, LocalDateTime.now());
         DeviceEventEntity saved = deviceEventJpaRepository.save(toEntity(event));
         DeviceEventView view = toView(toDomain(saved));
 
         log.info(
-                "Device event saved. deviceCode=, protocol=, sourceIp=, ackCode=",
+                "장비 이벤트 저장 완료. deviceCode={}, protocol={}, sourceIp={}, ackCode={}",
                 view.deviceCode(),
                 view.protocol(),
                 view.sourceIp(),

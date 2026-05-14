@@ -44,12 +44,12 @@ export function WorkItemBoard({ token }: WorkItemBoardProps) {
       <div className="workItemHeader">
         <div>
           <p className="workItemEyebrow">작업 보드 — Redis 캐시 · PostgreSQL 영속화</p>
-          <h2 className="workItemTitle">Work Items</h2>
+          <h2 className="workItemTitle">작업 항목</h2>
         </div>
         <div className="workItemHeaderRight">
           <span className="badge">{board.totalCount}건</span>
           <span className={`badge ${board.cached ? "" : "neutral"}`}>
-            캐시 {board.cached ? "HIT" : "MISS"}
+            캐시 {board.cached ? "적중" : "미스"}
           </span>
         </div>
       </div>
@@ -87,9 +87,9 @@ export function WorkItemBoard({ token }: WorkItemBoardProps) {
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as WorkItemPriority)}
               >
-                <option value="HIGH">🔴 높음 (HIGH)</option>
-                <option value="MEDIUM">🟡 보통 (MEDIUM)</option>
-                <option value="LOW">🟢 낮음 (LOW)</option>
+                <option value="HIGH">🔴 높음</option>
+                <option value="MEDIUM">🟡 보통</option>
+                <option value="LOW">🟢 낮음</option>
               </select>
             </label>
 

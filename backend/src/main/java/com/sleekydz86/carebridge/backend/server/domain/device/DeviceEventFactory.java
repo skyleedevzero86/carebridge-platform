@@ -9,7 +9,7 @@ public final class DeviceEventFactory {
 
     public static DeviceEvent create(InterpretedDevicePayload interpretedPayload, String rawPayload, String sourceIp, LocalDateTime receivedAt) {
         String normalizedPayload = rawPayload == null ? "" : rawPayload.strip();
-        String normalizedSourceIp = sourceIp == null || sourceIp.isBlank() ? "unknown" : sourceIp;
+        String normalizedSourceIp = sourceIp == null || sourceIp.isBlank() ? "알수없음" : sourceIp;
 
         if (normalizedPayload.isBlank()) {
             throw new IllegalArgumentException("장비 수신 원문이 비어 있습니다.");

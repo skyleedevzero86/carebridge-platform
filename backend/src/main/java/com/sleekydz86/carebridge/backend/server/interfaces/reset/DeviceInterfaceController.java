@@ -37,8 +37,8 @@ public class DeviceInterfaceController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DeviceInterfaceService.DeviceEventView> simulate(@Valid @RequestBody SimulateDeviceRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(deviceInterfaceService.ingest(request.payload(), "manual-console"));
+                .body(deviceInterfaceService.ingest(request.payload(), "수동콘솔"));
     }
 
-    public record SimulateDeviceRequest(@NotBlank String payload)  {}
+    public record SimulateDeviceRequest(@NotBlank(message = "페이로드를 입력해 주세요.") String payload)  {}
 }

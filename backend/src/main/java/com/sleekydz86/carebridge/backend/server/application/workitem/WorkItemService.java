@@ -69,7 +69,7 @@ public class WorkItemService {
             WorkItemSorter sorter = sorters.stream()
                     .filter(candidate -> candidate.supports() == sortType)
                     .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Unsupported sort type: " + sortType));
+                    .orElseThrow(() -> new IllegalArgumentException("지원하지 않는 정렬 방식입니다: " + sortType));
 
             List<WorkItem> domains = new ArrayList<>();
             for (WorkItemEntity entity : repository.findAll()) {
@@ -103,7 +103,7 @@ public class WorkItemService {
 
     public WorkItemBoardView.ItemView updateStatus(String workItemId, WorkItemStatus status) {
         WorkItemEntity entity = repository.findById(UUID.fromString(workItemId))
-                .orElseThrow(() -> new WorkItemNotFoundException("Work item not found: " + workItemId));
+                .orElseThrow(() -> new WorkItemNotFoundException("작업 항목을 찾을 수 없습니다: " + workItemId));
 
         WorkItem saved = saveDomain(toDomain(entity).moveTo(status, LocalDateTime.now()));
         clearCache();
@@ -144,7 +144,7 @@ public class WorkItemService {
 
     private WorkItemBoardView.ItemView toView(WorkItem workItem) {
         if (workItem.id() == null) {
-            throw new IllegalArgumentException("work item id is null");
+            throw new IllegalArgumentException("작업 항목 ID가 없습니다.");
         }
         return new WorkItemBoardView.ItemView(
                 workItem.id().toString(),
