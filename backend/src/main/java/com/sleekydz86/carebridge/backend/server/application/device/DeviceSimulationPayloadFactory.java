@@ -9,7 +9,6 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class DeviceSimulationPayloadFactory {
-
     private static final DateTimeFormatter HL7_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final List<String> KEY_VALUE_DEVICES = List.of("XRAY-01", "VITAL-02", "LAB-03");
 
@@ -43,10 +42,8 @@ public class DeviceSimulationPayloadFactory {
         String patientNo = patientA ? "P0001" : "P0002";
         String orderNo = patientA ? "ORD-001" : "ORD-002";
         String examCode = patientA ? "ECG" : "LAB";
-        String examName = patientA ? "심전도" : "기본 혈액화학";
-        String observationValue = patientA
-                ? String.valueOf(random.nextInt(62, 105))
-                : String.format("%.1f", random.nextDouble(3.5, 7.8));
+        String examName = patientA ? "Electrocardiogram" : "Basic Chemistry";
+        String observationValue = patientA ? String.valueOf(random.nextInt(62, 105)) : String.format("%.1f", random.nextDouble(3.5, 7.8));
         String obxCode = patientA ? "HR" : "GLUCOSE";
         String obxName = patientA ? "Heart Rate" : "Glucose";
         String unit = patientA ? "bpm" : "mmol/L";

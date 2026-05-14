@@ -1,11 +1,66 @@
-# CareBridge Platform
+# CareBridge EMR Interface Server
+
+> 외부 장비 메시지 수신 플랫폼을 기반으로, **HL7 ORU^R01** 검사결과 메시지를 환자·검사오더와 매칭해 `observation_result`로 저장하고, **HL7 원문 로그·ACK·EMR 콘솔 조회**까지 한 흐름으로 보여 주는 **백엔드 인터페이스 서버**입니다. 동일 TCP 포트에서 비 `MSH` 장비 페이로드는 기존처럼 `device_event` 경로로 처리합니다.
+
+**포트폴리오 포지션:** **의료장비-HL7-EMR 연동 백엔드** — 평가자가 보통 궁금해하는 “장비에서 온 검사결과가 환자·검사오더에 어떻게 붙는가”를 코드로 설명하는 데 초점을 둡니다. README·코드·테스트가 맞물리면 **제출용 포트폴리오**로 사용해도 됩니다.
+
+## 제출용 요약 (약 30초)
+
+### 핵심 데모 흐름
+
+```text
+HL7 ORU^R01 REST 또는 TCP 수신
+→ MSH / PID / OBR / OBX 파싱
+→ messageControlId 중복 검사
+→ patientNo · orderNo 매칭
+→ observation_result 저장 · exam_order COMPLETED
+→ hl7_message_log · audit_log 기록
+→ ACK AA 또는 AE (REST는 JSON에 ackMessage 포함)
+→ EMR 콘솔에서 환자 상세·HL7 로그 조회
+```
+
+### MVP에서 먼저 볼 것 (5가지)
+
+- REST·TCP로 **ORU^R01** 수신 — 업무 처리는 동일하게 **`RegisterObservationResultUseCase`** 경로
+- 환자·검사오더 검증 후 **검사결과 저장** 및 오더 **COMPLETED**
+- **`hl7_message_log`** 에 원문·처리 상태·ACK (성공/실패 모두 남김)
+- **`messageControlId`** 중복 시 `observation_result` 추가 저장 없음
+- 콘솔 **환자·HL7 로그** 화면 및 WebSocket **`HL7_MESSAGE`** 로 갱신 (채팅·작업 보드·Presence는 부가 기능)
+
+### 빠른 데모
+
+1. (선택) 저장소 루트에서 `docker compose up -d` — PostgreSQL `5433`, Redis `9379`
+2. `backend`에서 `./gradlew bootRun` (Windows: `gradlew.bat bootRun`)
+3. `frontend`에서 `pnpm install` 후 `pnpm dev` → `http://localhost:3000`
+4. `operator` / `Operator1234!` 로 로그인
+5. `POST /api/interface/hl7/messages` (`Content-Type: text/plain`, Bearer JWT)로 샘플 ORU^R01 전송
+6. `GET /api/patients/P0001` 또는 `GET /api/patients/P0001/observation-results` 로 검사결과 확인
+7. `GET /api/interface/hl7/messages` (또는 `GET /api/interface/hl7/messages/{messageControlId}`) 로 HL7 로그·`SUCCESS`/`AA` 확인
+
+### 향후 구조·리팩터링
+
+README 최상단에는 두지 않습니다. 우선순위·구조 개선 메모는 **[docs/ROADMAP.md](docs/ROADMAP.md)** 를 참고하세요.
+
+---
+
+## EMR 데모 시나리오 (평가·리뷰용)
+
+아래 순서대로 따라가면 **ORU^R01 → DB → ACK → UI** 흐름을 한 번에 확인할 수 있습니다. (시드 기동 시 1·2는 이미 채워져 있으면 해당 단계는 검증만 하면 됩니다.)
+
+1. **환자 `P0001` 생성** — 시드 `DemoDataInitializer` 또는 EMR 환자 API로 존재 확인
+2. **검사오더 `ORD-001` 생성** — `P0001`에 연결된 오더인지 확인
+3. **HL7 ORU^R01 REST 전송** — `POST /api/interface/hl7/messages` (`text/plain`, Bearer JWT)
+4. **`observation_result` 저장 확인** — DB 또는 `GET /api/patients/P0001` 상세(포함 오더·결과) 또는 `GET /api/patients/P0001/observation-results`
+5. **`hl7_message_log` SUCCESS 확인** — `GET /api/interface/hl7/messages` 또는 `GET /api/interface/hl7/messages/{messageControlId}` 에서 `processStatus=SUCCESS`, `ackCode=AA`
+6. **환자 상세 화면에서 검사결과 확인** — 프론트 EMR 메뉴 → 환자 → 상세
+7. **동일 `messageControlId` 재전송** — 두 번째는 중복 처리로 **추가 저장 없음**·응답에 `DUPLICATE_MESSAGE`
+8. **존재하지 않는 환자 `P9999` 전송** — ACK **AE**, 로그 **FAILED**·`PATIENT_NOT_FOUND` (또는 파서 실패 시 `AE` + 해당 에러코드)
+
+<br/>
+<br/>
 
 <img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/999f4c9e-0648-4467-81ae-645ea4f4fca8" />
 
-<br/>
-<br/>
-의료 장비·게이트웨이에서 들어오는 TCP 메시지를 수신·해석·저장하고, **HL7 ORU^R01** 스타일 검사 결과를 환자·검사오더와 매칭해 적재하며, 운영자 콘솔에서 실시간 채팅·접속자·장비 이벤트·HL7 처리 로그를 한 화면에서 볼 수 있게 만든 풀스택 샘플 프로젝트입니다.
-<br/>
 <br/>
 
 <img width="1897" height="923" alt="image" src="https://github.com/user-attachments/assets/b9c8fcc2-c218-44bd-888b-8ae80b914411" />
@@ -20,53 +75,60 @@
 
 <br/>
 
-| 구분     | 기술                                                                                                                                                                                   |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend  | Java 25, **Spring Boot 4**, Spring Security (JWT), Spring Data JPA, Spring Data Redis, Spring WebSocket, Spring Validation, Spring Actuator, Lombok, PostgreSQL, 커스텀 TCP 게이트웨이 |
-| Frontend | **Next.js 16** (App Router), **React 19**, TypeScript, Space Grotesk + Noto Sans KR, pnpm. React Compiler는 기본 비활성, `NEXT_REACT_COMPILER=1` 일 때만 `next.config.ts`에서 켜짐     |
+| 구분     | 기술                                                                                                                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Backend  | **Java 25** (`backend/build.gradle.kts` 툴체인), **Spring Boot 4**, Spring Security (JWT), Spring Data JPA, Spring Data Redis, Spring WebSocket, Spring Validation, Spring Actuator, Lombok, PostgreSQL, 커스텀 TCP 게이트웨이 |
+| Frontend | **Next.js 16** (App Router), **React 19**, TypeScript, Tailwind 4, Space Grotesk + Noto Sans KR, pnpm. 개발 기본 `next dev --webpack` + `WATCHPACK_POLLING`, React Compiler는 `NEXT_REACT_COMPILER=1`일 때만 활성화            |
 
-### 문서·저장소 정합성 (제출 전 체크)
+### 문서·저장소 정합성
 
-| 항목                   | 실제 저장소 기준                                                                                                                                                        |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **JDK**                | `backend/build.gradle.kts` 의 `java { toolchain { languageVersion = … } }` 와 동일하게 README에 기재 (**현재 25**). Gradle은 이 저장소에서 수정하지 않고 문서만 맞춘다. |
-| **프론트 폴더**        | **`frontend/`** (루트의 Next.js 앱). `web` 등 다른 폴더명은 사용하지 않음.                                                                                              |
-| **Java 베이스 패키지** | `com.sleekydz86.carebridge.backend` — `com/intel3/...` 경로는 존재하지 않음.                                                                                            |
-| **`interfaces.reset`** | HTTP 컨트롤러 패키지의 **디렉터리 이름**이 `reset` 이다(REST 약어가 아님). 리네이밍은 코드 변경 시 별도 작업.                                                           |
+| 항목                   | 실제 기준                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **JDK**                | `backend/build.gradle.kts` 의 `java.toolchain.languageVersion` 과 README의 JDK 표기를 맞출 것 (**현재 25**).                    |
+| **프론트 루트**        | 저장소의 **`frontend/`** 디렉터리 (Next 앱).                                                                                    |
+| **Java 패키지**        | `com.sleekydz86.carebridge.backend` 하위만 사용.                                                                                |
+| **아키텍처 표현**      | **의존성 분리를 고려한 계층형 구조**로 설명. 기능 흐름·도메인 경계가 핵심. “완전한 헥사고날” 등 **특정 스타일 단정**은 피할 것. |
+| **`interfaces.reset`** | REST 컨트롤러 패키지 **디렉터리 이름**이 `reset` (REST 약어와 무관). EMR 일부 API는 `adapter.in.web` 에 있을 수 있음.           |
+| **로드맵**             | [docs/ROADMAP.md](docs/ROADMAP.md) — 구조 개선·제출 전 안정화 우선순위 (README 본문과 분리).                                    |
 
-### 핵심 시나리오 (로컬 데모 ~1분)
+### 빠른 검증 시나리오 (~1분)
 
-1. (선택) 저장소 루트에서 `docker compose up -d` 로 PostgreSQL(5433)·Redis(9379) 기동
-2. `backend` 에서 `./gradlew bootRun`(Windows: `gradlew.bat bootRun`) — HTTP 8080, TCP 9093, 내장 장비 시뮬레이터
-3. `frontend` 에서 `pnpm install` 후 `pnpm dev` — `http://localhost:3000`
-4. 시드 계정(예: `operator` / `Operator1234!`) 로그인 → 사이드바에서 **작업 보드**, **채팅**, **환자·HL7 로그·시뮬레이터** 등 전환
-5. EMR: 시드 환자 `P0001`·오더 `ORD-001` 에 맞는 HL7 을 `POST /api/interface/hl7/messages` 또는 콘솔 시뮬레이터로 전송 → HL7 로그·검사 결과 반영 확인
+상단 **[제출용 요약 → 빠른 데모](#제출용-요약-약-30초)** 와 **[EMR 데모 시나리오](#emr-데모-시나리오-평가리뷰용)** 를 기준으로 하면 됩니다. 추가로 UI 전체를 훑을 때만 아래를 이어서 진행합니다.
+
+1. (선택) 루트에서 `docker compose up -d` → PostgreSQL `5433`, Redis `9379`
+2. `backend` 에서 `./gradlew bootRun` (Windows: `gradlew.bat bootRun`)
+3. `frontend` 에서 `pnpm install` 후 `pnpm dev` → `http://localhost:3000`
+4. `operator` / `Operator1234!` 등으로 로그인 → **EMR** 메뉴(환자·HL7 로그) 확인 후, 필요 시 **작업 보드·채팅** 등 부가 화면 전환
 
 ---
 
 ## 목차
 
-1. [왜 만들었나](#왜-만들었나)
-2. [핵심 기능](#핵심-기능)
-3. [전체 아키텍처](#전체-아키텍처)
-4. [계층 설계 (백엔드)](#계층-설계-백엔드)
-5. [ERD (데이터 모델)](#erd-데이터-모델)
-6. [Redis 데이터 모델](#redis-데이터-모델)
-7. [API 명세](#api-명세)
-8. [WebSocket 프로토콜](#websocket-프로토콜)
-9. [TCP 디바이스 프로토콜](#tcp-디바이스-프로토콜)
-10. [EMR·HL7 인터페이스](#emrhl7-인터페이스)
-11. [저장소 구조](#저장소-구조)
-12. [사전 요구 사항](#사전-요구-사항)
-13. [빠른 시작](#빠른-시작)
-14. [포트 정리](#포트-정리)
-15. [환경 변수](#환경-변수)
-16. [내장 장비 시뮬레이터](#내장-장비-시뮬레이터)
-17. [백엔드 테스트](#백엔드-테스트)
-18. [실시간 데이터 흐름](#실시간-데이터-흐름)
-19. [TCP 수동 테스트](#tcp-수동-테스트)
-20. [보안·운영 참고](#보안운영-참고)
-21. [라이선스 / 면책](#라이선스--면책)
+1. [프로젝트 요약 (약 30초)](#프로젝트-요약-약-30초)
+2. [프로젝트 시나리오 (평가·리뷰용)](#프로젝트-시나리오-평가리뷰용)
+3. [왜 만들었나](#왜-만들었나)
+4. [핵심 기능](#핵심-기능)
+5. [전체 아키텍처](#전체-아키텍처)
+6. [계층 설계 (백엔드)](#계층-설계-백엔드)
+7. [ERD (데이터 모델)](#erd-데이터-모델)
+8. [Redis 데이터 모델](#redis-데이터-모델)
+9. [API 명세](#api-명세)
+10. [WebSocket 프로토콜](#websocket-프로토콜)
+11. [TCP 디바이스 프로토콜](#tcp-디바이스-프로토콜)
+12. [EMR·HL7 인터페이스](#emrhl7-인터페이스)
+13. [저장소 구조](#저장소-구조)
+14. [사전 요구 사항](#사전-요구-사항)
+15. [빠른 시작](#빠른-시작)
+16. [포트 정리](#포트-정리)
+17. [환경 변수](#환경-변수)
+18. [내장 장비 시뮬레이터](#내장-장비-시뮬레이터)
+19. [백엔드 테스트](#백엔드-테스트)
+20. [실시간 데이터 흐름](#실시간-데이터-흐름)
+21. [TCP 수동 테스트](#tcp-수동-테스트)
+22. [보안·운영 참고](#보안운영-참고)
+23. [라이선스 / 면책](#라이선스--면책)
+
+문서: [docs/ROADMAP.md](docs/ROADMAP.md) (향후 구조·안정화 우선순위)
 
 ---
 
@@ -85,6 +147,8 @@
 
 ## 핵심 기능
 
+제출·면접에서는 상단 **[프로젝트 요약](#프로젝트-요약-약-30초)** 의 EMR·HL7 흐름을 먼저 설명하고, 아래 목록은 **전체 기능**(장비 이벤트·채팅·작업 보드 포함) 참고용입니다.
+
 1. **장비 인터페이스 (TCP)**
    - 별도 포트 (`9093` 기본)에서 TCP 접속을 받고, 페이로드를 해석한 뒤 한 줄 ACK(또는 HL7 ACK 문자열)를 반환합니다.
    - 페이로드가 **`MSH|`로 시작**하면 `EmrInterfaceService`로 전달되어 ORU^R01 처리·DB 반영 후 **HL7 ACK**가 응답됩니다. 그 외는 기존처럼 **키-밸류 파이프(`|`)**와 **장비용 HL7 스타일** 인터프리터(`DevicePayloadInterpreter`) 체인으로 `device_event`에 적재됩니다.
@@ -95,10 +159,10 @@
    - 장비 이벤트를 JPA로 저장하고, 최근 25건·총 건수·마지막 수신 시각 등을 REST로 제공합니다.
 
 3. **실시간 운영 콘솔 (Next.js)**
-   - 로그인/회원가입 후 JWT Bearer 토큰으로 보호된 REST API 호출.
-   - WebSocket (`/ws/chat`)으로 채팅 메시지, 접속자 목록 갱신, **신규 장비 이벤트**, **HL7 메시지 로그 갱신**(`HL7_MESSAGE`)을 수신합니다.
-   - 환자 목록·상세, 검사오더, HL7 수신 로그, 의료장비 목록, ORU 시뮬레이션 등 EMR 뷰를 콘솔에서 조회합니다.
-   - `useEffectEvent`·`startTransition` 등 React 19 신규 API를 적극 활용한 상태 관리.
+   - 로그인 후 JWT Bearer 로 REST 호출, WebSocket (`/ws/chat?token=…`) 으로 **채팅·접속자·장비 이벤트(`DEVICE_EVENT`)·HL7 로그(`HL7_MESSAGE`)** 수신.
+   - 단일 앱에서 사이드바 메뉴: **작업 보드**, **채팅**, **환자·검사 오더·검사 결과·HL7 로그·의료기기·시뮬레이터**. 상단 **CareBridge** 브랜드는 `/` 이동 + 기본(환자) 메뉴로 초기화.
+   - 채팅: WS `CHAT` 전송 권장, 미연결 시 `POST /api/chat/messages` 폴백.
+   - `startTransition` 등으로 데이터 패칭·탭 전환 시 UI 블로킹 완화.
 
 4. **Presence (접속 상태)**
    - Redis 기반 TTL 키(`carebridge:presence:{userId}`, TTL 70초)로 온라인/오프라인을 표시합니다.
@@ -124,6 +188,9 @@
 ---
 
 ## 전체 아키텍처
+
+**표현 방향:** 아래는 **실행 시 데이터·제어 흐름**을 중심으로 그린 구성도입니다. <br/>
+아키텍처 스타일을 주장하는 다이어그램이 아니며, **의료장비 → 수신·검증·저장 → ACK / 콘솔 반영** 순서를 이해하는 용도로 두었습니다.
 
 ```mermaid
 flowchart TB
@@ -199,44 +266,46 @@ flowchart TB
 
 ## 계층 설계 (백엔드)
 
-백엔드는 **간결한 계층형 아키텍처**를 따릅니다.
+백엔드는 **의존성 분리를 고려한 계층형 구조**입니다. 진입점(HTTP·WebSocket·TCP)·애플리케이션 서비스·도메인 규칙·영속화를 나누어 두었고, **기능 흐름과 도메인 경계 이해**를 우선합니다. “완전한 헥사고날” 등 **특정 아키텍처 명칭으로 포장하지 않는 것**을 권장합니다(리뷰·면접에서 불필요한 공격면이 될 수 있음).
+
+실제 패키지는 `interfaces.*`·`adapter.*`·`application.*`·`domain.*` 등이 혼재할 수 있으므로, 아래 다이어그램은 **역할 관점**의 요약입니다.
 
 ```mermaid
 graph LR
-    subgraph interfaces["interfaces (어댑터)"]
-        REST_C["REST (interfaces.reset)"]
+    subgraph inbound["웹·실시간 진입 계층"]
+        REST_C["REST 컨트롤러\n(interfaces.reset 등)"]
         WS_H["WebSocket Handler"]
     end
 
-    subgraph application["application (유스케이스 + JPA Entity + Repository)"]
-        SVC["Service 클래스\n(AuthService, DeviceInterfaceService,\n EmrInterfaceService, ChatService, WorkItemService)"]
-        ENT["JPA Entities\n(UserEntity, DeviceEventEntity,\n PatientEntity, ExamOrderEntity, …)"]
-        REPO["Spring Data JPA Repositories"]
+    subgraph application["애플리케이션 계층"]
+        SVC["서비스·유스케이스\n(Auth, Device, EMR, Chat, WorkItem …)"]
+        ENT["JPA 엔티티·리포지토리\n(영속 모델)"]
     end
 
-    subgraph domain["domain (순수 비즈니스 규칙)"]
-        REC["Java Records\n(UserAccount, DeviceEvent,\n ChatMessage, WorkItem)"]
-        INTERP["Interpreter / Sorter / Factory"]
+    subgraph domain["도메인 계층"]
+        REC["Records / 값 객체\n규칙·Interpreter·Sorter"]
     end
 
-    subgraph config["config + security"]
-        CFG["AppProperties (ConfigurationProperties)"]
-        SEC["SecurityConfig, WebSocketConfig,\n TokenAuthenticationFilter"]
+    subgraph config["설정·보안"]
+        CFG["AppProperties 등"]
+        SEC["Security, WebSocket, JWT 필터"]
     end
 
-    interfaces --> application
+    inbound --> application
     application --> domain
-    config -.-> application & interfaces
+    config -.-> application & inbound
 ```
 
-| 패키지                                        | 역할                                                                                                                           |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `interfaces.reset`                            | HTTP 컨트롤러 (`/api/auth`, `/api/device-interface`, EMR `/api/patients` 등). 패키지 디렉터리명은 **`reset`**(REST 오타 아님). |
-| `interfaces.websocket`                        | WebSocket 핸들러, 메시지 라우팅, 이벤트 브로드캐스트                                                                           |
-| `application.{auth,device,emr,chat,workitem}` | 유스케이스 서비스, JPA Entity, JPA Repository                                                                                  |
-| `domain.{auth,device,chat,workitem}`          | 순수 도메인 Record, 팩토리, Interpreter, Sorter                                                                                |
-| `config`                                      | Spring 설정 빈 (Security, CORS, WebSocket, ConfigurationProperties)                                                            |
-| `security`                                    | JWT 발급·파싱, 인증 필터, UserPrincipal                                                                                        |
+| 패키지 / 영역                            | 역할                                                                                                                                |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `interfaces.reset` 등                    | HTTP 컨트롤러 (`/api/auth`, `/api/device-interface`, EMR API 등), `@RestControllerAdvice`. 디렉터리명 **`reset`** 은 역사적 네이밍. |
+| `adapter.in.web` 등                      | 일부 EMR·HL7 REST는 `adapter` 쪽에 둔 경우가 있음 — **진입 계층**으로 동일하게 이해하면 됨.                                         |
+| `interfaces.websocket`                   | WebSocket 핸들러, 메시지 라우팅, 이벤트 브로드캐스트                                                                                |
+| `application.*` / `server.application.*` | 유스케이스·서비스, 유스케이스 추상 타입(`…UseCase`, `…Port` 등), 트랜잭션 경계                                                      |
+| `domain.*`                               | 순수 도메인 Record, 팩토리, Interpreter, Sorter 등 **프레임워크에 덜 묶인 규칙**                                                    |
+| `adapter.out.persistence` 등             | JPA 엔티티·리포지토리 구현 등 **영속화**                                                                                            |
+| `config`                                 | Spring 설정 빈 (Security, CORS, WebSocket, ConfigurationProperties)                                                                 |
+| `security`                               | JWT 발급·파싱, 인증 필터, UserPrincipal                                                                                             |
 
 ---
 
@@ -365,12 +434,6 @@ erDiagram
     EXAM_ORDER ||--o{ OBSERVATION_RESULT : produces
 ```
 
-> `hl7_message_log`·`medical_device`·`audit_log` 는 JPA 엔티티 기준으로 상기 필드를 갖으며, `ddl-auto: update` 로 스키마가 맞춰집니다. FK는 엔티티 연관에 맞게 생성되며 일부 테이블은 로그성으로 단독 적재됩니다.
-
-> **참고:** `CHAT_MESSAGE.sender_id` 등은 JPA `@JoinColumn`/`@Column` 수준의 연관이며, DB 레벨 FK constraint는 일부 생략될 수 있습니다. `ddl-auto: update` 설정으로 애플리케이션 기동 시 테이블이 자동 생성·보완됩니다.
-
----
-
 ## Redis 데이터 모델
 
 ```mermaid
@@ -428,12 +491,12 @@ graph LR
 
 ### 채팅 (`/api/chat`)
 
-| Method | Path                 | 인증 | 설명                                                                |
-| ------ | -------------------- | ---- | ------------------------------------------------------------------- |
-| `GET`  | `/api/chat/messages` | O    | 최근 채팅 메시지 목록 (페이지네이션, `page` 쿼리)                   |
-| `POST` | `/api/chat/messages` | O    | 채팅 메시지 전송(JSON `{ "content" }`) — WebSocket 미연결 시 폴백용 |
+| Method | Path                 | 인증 | 설명                                                                 |
+| ------ | -------------------- | ---- | -------------------------------------------------------------------- |
+| `GET`  | `/api/chat/messages` | O    | 최근 채팅 메시지 목록 (`page` 쿼리, `app.pagination.chat-page-size`) |
+| `POST` | `/api/chat/messages` | O    | JSON `{ "content" }` 전송 — WebSocket 미연결 시 폴백                 |
 
-권장: 연결된 클라이언트는 WebSocket으로 `{ "type": "CHAT", "content": "…" }` 전송 → 서버가 `CHAT_MESSAGE` 로 브로드캐스트합니다. 운영 콘솔은 WS 우선, 끊긴 경우 REST `POST` 로도 전송합니다.
+권장: 연결된 클라이언트는 `{ "type": "CHAT", "content": "…" }` 를 WebSocket으로보내면 서버가 `CHAT_MESSAGE` 로 브로드캐스트합니다.
 
 ---
 
@@ -509,12 +572,14 @@ graph LR
 
 **엔드포인트:** `ws://localhost:8080/ws/chat?token={JWT}`
 
+연결 **핸드셰이크** 단계에서 `WebSocketHandshakeAuthInterceptor`가 `token` 쿼리의 JWT를 검증하고, 실패 시 연결을 거절합니다. 이후 메시지 처리는 `ChatWebSocketHandler`가 담당합니다.
+
 ```mermaid
 sequenceDiagram
     participant C as 클라이언트
     participant S as ChatWebSocketHandler
 
-    C->>S: WebSocket 연결 (URI에 ?token=JWT)
+    C->>S: WebSocket 연결 (?token=JWT, 핸드셰이크에서 검증)
     S-->>C: CONNECTED { user }
     S-->>C: PRESENCE_SNAPSHOT [ ...members ]
 
@@ -564,13 +629,17 @@ DEVICE=VITAL-01|PATIENT=P-1001|HEART_RATE=72|SPO2=98|STATUS=READY
 
 ### HL7 스타일
 
-**한 줄(짧은 ORU 형태)** 은 TCP 수신 후 `device_event` 용 인터프리터 체인으로 들어가 요약·저장될 수 있습니다.
+**짧은 한 줄 ORU** 는 TCP 수신 후 `device_event` 용 인터프리터 체인으로 요약·저장될 수 있습니다.
 
 ```
 MSH|^~\&|HL7-GATEWAY-A|CAREBRIDGE|EMR|HOSPITAL|20260321153000||ORU^R01|MSG1|P|2.5
 ```
 
-**멀티라인·EMR 적재** 는 `MSH` 로 시작하는 전체 배치가 `TcpDeviceGateway` 에서 `EmrInterfaceService` 로 직접 전달됩니다. 파서는 `PID-3` 환자번호, `OBR-2`(비어 있으면 `OBR-3`) 오더번호 등을 사용하므로, 데모 DB와 맞추려면 예를 들어 아래처럼 **`P0001` / `ORD-001`** 을 사용합니다.
+- `MSH[2]` or `MSH[3]` → `deviceCode` (파서·인터프리터 규칙에 따름)
+- `PID[3]` → `patientCode`
+- `OBX[5]` → `summary`
+
+**멀티라인·EMR 적재:** TCP 버퍼가 `MSH|` 배치로 플러시되면 `EmrInterfaceService` 로 직접 전달됩니다. `Hl7MessageParser` 는 `PID-3` 환자번호, **`OBR-2` 오더번호(비어 있으면 `OBR-3`)** 등을 사용합니다. 데모 DB와 맞춘 예:
 
 ```
 MSH|^~\&|ECG-001|CAREBRIDGE|EMR|HOSPITAL|20260514103000||ORU^R01|MSG00001|P|2.5
@@ -579,11 +648,7 @@ OBR|1|ORD-001||ECG^심전도
 OBX|1|NM|HR^Heart Rate||78|bpm|60-100|N
 ```
 
-- `MSH[2]` or `MSH[3]` → `deviceCode`
-- `PID[3]` → `patientCode`
-- `OBX[5]` → `summary`
-
-두 인터프리터는 `@Order` 어노테이션으로 우선순위 설정: **HL7(1) → Key-Value(2)**. 단, TCP로 들어온 메시지 **전체가 `MSH|`로 시작**하면 위 인터프리터를 거치지 않고 **EMR 서비스**로 보내져 `patient` / `exam_order` 검증 후 `observation_result`에 저장됩니다.
+두 인터프리터는 `@Order`: **HL7(1) → Key-Value(2)**. 단, TCP 메시지 **전체가 `MSH|`로 시작**하면 인터프리터 체인을 건너뛰고 **EMR** 경로로 갑니다.
 
 ### EMR용 HL7 (ORU^R01, TCP·HTTP 공통)
 
@@ -592,6 +657,7 @@ OBX|1|NM|HR^Heart Rate||78|bpm|60-100|N
 - **중복:** 동일 `messageControlId`는 거절(`DUPLICATE_MESSAGE`)됩니다.
 - **TCP 응답:** 성공·실패 모두 `ackMessage` 문자열이 한 줄 이상으로 기록되며, 게이트웨이가 소켓으로 그대로 flush 합니다.
 - **HTTP:** `POST /api/interface/hl7/messages`에 `Content-Type: text/plain`으로 원문을 넣으면 동일 처리·JSON 응답을 받습니다.
+- **TCP 프레이밍:** 현재는 **줄 단위 버퍼·플러시** 모델입니다. 전통 HL7 **MLLP**(프레이밍 바이트)는 미구현이며, 필요 시 `TcpDeviceGateway` 앞단에 프레이밍만 얹는 식으로 확장할 수 있습니다.
 
 ---
 
@@ -606,6 +672,8 @@ OBX|1|NM|HR^Heart Rate||78|bpm|60-100|N
 ```
 carebridge-platform/
 ├── README.md
+├── docs/
+│   └── ROADMAP.md                           # 구조·안정화 우선순위 (README 본문과 분리)
 ├── docker-compose.yml                       # 로컬 PostgreSQL(5433)·Redis(9379) — 선택
 ├── backend/                                 # Spring Boot 4 — HTTP :8080, TCP :9093
 │   ├── build.gradle.kts
@@ -615,23 +683,23 @@ carebridge-platform/
 │       ├── global/config/                   # Security, WebSocket, DemoDataInitializer, AppProperties …
 │       ├── global/security/                 # JWT, TokenAuthenticationFilter …
 │       ├── server/domain/                   # 순수 도메인 (auth, device, chat, workitem)
-│       ├── server/application/
-│       │   ├── auth/ | device/ | chat/ | workitem/
-│       │   └── emr/                         # EMR·HL7: EmrInterfaceService, 파서, 엔티티, 리포지토리
+│       ├── server/application/              # 유스케이스·서비스, port(in/out), EMR 서비스 등
+│       ├── server/adapter/                  # 인바운드 웹(`adapter/in/web/…`), 영속화(`adapter/out/…`) 등
 │       └── server/interfaces/
-│           ├── reset/                       # REST 컨트롤러 (Auth, Device, WorkItem, Chat, User …)
-│           ├── reset/emr/EmrInterfaceController.java
-│           └── websocket/ChatWebSocketHandler.java
+│           ├── reset/                       # REST (Auth, Device, WorkItem, Chat …)
+│           └── websocket/                   # ChatWebSocketHandler, WebSocketHandshakeAuthInterceptor
 │
-└── frontend/                                # Next.js 16 (App Router)
+└── frontend/                                # Next.js 16 (App Router) — EMR·HL7 조회·시뮬레이터 UI
     ├── package.json
     └── src/
         ├── app/                             # layout, page, globals.css
         └── features/
             ├── chat/                        # 채팅 패널 UI
-            ├── console/                     # 운영 콘솔 (로그인, 작업 보드, 채팅, EMR·HL7, WebSocket)
+            ├── console/                     # 운영 콘솔 (로그인, EMR·HL7, WebSocket 연동)
             └── work-items/                  # 작업 보드
 ```
+
+일부 EMR·HL7 REST는 `server/adapter/in/web/emr/` 등에 있고, JPA 엔티티는 `server/adapter/out/persistence/emr/` 에 모여 있습니다. 위 트리는 **역할 중심 요약**입니다.
 
 ---
 
@@ -649,9 +717,9 @@ carebridge-platform/
 
 ## 빠른 시작
 
-### 0) (선택) PostgreSQL·Redis만 Docker로
+### 0) (선택) PostgreSQL·Redis — Docker
 
-저장소 루트(`carebridge-platform/`)에서:
+저장소 루트에서:
 
 ```powershell
 docker compose up -d
@@ -660,7 +728,7 @@ docker compose up -d
 - PostgreSQL: `localhost:5433`, DB `carebridge`, 사용자/비밀번호 `postgres` / `postgres`
 - Redis: `localhost:9379`, 비밀번호 `123456`
 
-애플리케이션의 `application.yml` 기본값과 맞춰 두었습니다.
+`application.yml` 기본값과 맞춰 두었습니다.
 
 ### 1) 백엔드
 
@@ -768,8 +836,18 @@ $env:DEVICE_SIMULATOR_ENABLED='false'
 
 ## 백엔드 테스트
 
-- **현재:** `backend/src/test/java/com/sleekydz86/carebridge/backend/BackendApplicationTests.java` — 애플리케이션 컨텍스트 기동 스모크.
-- **권장:** `Hl7MessageParser`(세그먼트·`messageControlId`·다중 OBX), `EmrInterfaceService`(정상 적재·중복 `messageControlId`·미등록 환자/오더·ACK 분기), TCP `MSH|` vs 키-밸류 라우팅에 대한 단위·통합 테스트를 단계적으로 추가하면 포트폴리오 신뢰도가 올라갑니다.
+실행: `backend` 디렉터리에서 `./gradlew test` (Windows: `gradlew.bat test`).
+
+| 테스트 클래스                 | 내용                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `DefaultHl7MessageParserTest` | ORU^R01 파싱, `OBR-2`/`OBR-3` 오더번호, 잘못된 세그먼트·메시지 타입                                     |
+| `Hl7AckGeneratorTest`         | ACK **AA** / **AE**·`MSA`·실패 시 `ERR` 세그먼트                                                        |
+| `EmrInterfaceServiceTest`     | `messageControlId` 중복, 환자 없음, 오더 없음, 정상 저장·`SUCCESS` 로그, 파서 실패 시 `AE`              |
+| `BackendApplicationTests`     | `@ActiveProfiles("test")` + 인메모리 H2 + 테스트용 `StringRedisTemplate` 로 Spring 전체 컨텍스트 스모크 |
+
+추가 권장: TCP `MSH|` 분기·`device_event` 경로 통합 테스트.
+
+**참고:** Windows에서 Gradle 테스트 워커가 프로젝트 경로의 비 ASCII 문자 때문에 `ClassNotFoundException`을 내는 환경이 있습니다. 이 경우 저장소를 `C:\dev\carebridge-platform` 등 **ASCII만 있는 경로**로 복제한 뒤 `gradlew test`를 다시 실행해 보세요.
 
 ---
 
@@ -836,9 +914,9 @@ sequenceDiagram
 ## 보안·운영 참고
 
 - REST API는 **JWT (Bearer)** 기반 stateless 인증입니다. (`/api/auth/**`와 일부 Actuator 경로 제외.)
-- WebSocket은 연결 URI의 `?token=` 쿼리 파라미터에서 토큰을 추출해 검증합니다.
+- WebSocket은 **핸드셰이크 시** `?token=` JWT를 `WebSocketHandshakeAuthInterceptor`에서 검증합니다. 통과 시 세션에 사용자 주체가 설정됩니다.
 - `POST /api/device-interface/simulate`는 `ROLE_ADMIN`만 호출 가능합니다. `POST /api/device-interface/simulate/hl7`는 **인증된 사용자**(ADMIN·OPERATOR)면 호출 가능합니다.
-- `POST /api/interface/hl7/messages` 및 EMR 조회 API도 동일하게 **Bearer 토큰**이 필요합니다. 외부 시스템 연동 시 별도 서비스 계정·MLLP·IP 제한 등을 고려하세요.
+- `POST /api/interface/hl7/messages` 및 EMR 조회 API도 동일하게 **Bearer 토큰**이 필요합니다.
 - **프로덕션에서는 `APP_TOKEN_SECRET` 등 시크릿을 반드시 교체**하세요.
 - Actuator 엔드포인트 노출 범위: `health`, `info`, `metrics` (기본).
 
