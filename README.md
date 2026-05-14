@@ -22,8 +22,25 @@
 
 | 구분     | 기술                                                                                                                                                                                   |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend  | Java 21, **Spring Boot 4**, Spring Security (JWT), Spring Data JPA, Spring Data Redis, Spring WebSocket, Spring Validation, Spring Actuator, Lombok, PostgreSQL, 커스텀 TCP 게이트웨이 |
-| Frontend | **Next.js 16** (App Router), **React 19**, TypeScript, Space Grotesk + Noto Sans KR, pnpm                                                                                              |
+| Backend  | Java 25, **Spring Boot 4**, Spring Security (JWT), Spring Data JPA, Spring Data Redis, Spring WebSocket, Spring Validation, Spring Actuator, Lombok, PostgreSQL, 커스텀 TCP 게이트웨이 |
+| Frontend | **Next.js 16** (App Router), **React 19**, TypeScript, Space Grotesk + Noto Sans KR, pnpm. React Compiler는 기본 비활성, `NEXT_REACT_COMPILER=1` 일 때만 `next.config.ts`에서 켜짐     |
+
+### 문서·저장소 정합성 (제출 전 체크)
+
+| 항목                   | 실제 저장소 기준                                                                                                                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **JDK**                | `backend/build.gradle.kts` 의 `java { toolchain { languageVersion = … } }` 와 동일하게 README에 기재 (**현재 25**). Gradle은 이 저장소에서 수정하지 않고 문서만 맞춘다. |
+| **프론트 폴더**        | **`frontend/`** (루트의 Next.js 앱). `web` 등 다른 폴더명은 사용하지 않음.                                                                                              |
+| **Java 베이스 패키지** | `com.sleekydz86.carebridge.backend` — `com/intel3/...` 경로는 존재하지 않음.                                                                                            |
+| **`interfaces.reset`** | HTTP 컨트롤러 패키지의 **디렉터리 이름**이 `reset` 이다(REST 약어가 아님). 리네이밍은 코드 변경 시 별도 작업.                                                           |
+
+### 핵심 시나리오 (로컬 데모 ~1분)
+
+1. (선택) 저장소 루트에서 `docker compose up -d` 로 PostgreSQL(5433)·Redis(9379) 기동
+2. `backend` 에서 `./gradlew bootRun`(Windows: `gradlew.bat bootRun`) — HTTP 8080, TCP 9093, 내장 장비 시뮬레이터
+3. `frontend` 에서 `pnpm install` 후 `pnpm dev` — `http://localhost:3000`
+4. 시드 계정(예: `operator` / `Operator1234!`) 로그인 → 사이드바에서 **작업 보드**, **채팅**, **환자·HL7 로그·시뮬레이터** 등 전환
+5. EMR: 시드 환자 `P0001`·오더 `ORD-001` 에 맞는 HL7 을 `POST /api/interface/hl7/messages` 또는 콘솔 시뮬레이터로 전송 → HL7 로그·검사 결과 반영 확인
 
 ---
 
@@ -45,10 +62,11 @@
 14. [포트 정리](#포트-정리)
 15. [환경 변수](#환경-변수)
 16. [내장 장비 시뮬레이터](#내장-장비-시뮬레이터)
-17. [실시간 데이터 흐름](#실시간-데이터-흐름)
-18. [TCP 수동 테스트](#tcp-수동-테스트)
-19. [보안·운영 참고](#보안운영-참고)
-20. [라이선스 / 면책](#라이선스--면책)
+17. [백엔드 테스트](#백엔드-테스트)
+18. [실시간 데이터 흐름](#실시간-데이터-흐름)
+19. [TCP 수동 테스트](#tcp-수동-테스트)
+20. [보안·운영 참고](#보안운영-참고)
+21. [라이선스 / 면책](#라이선스--면책)
 
 ---
 
@@ -211,14 +229,14 @@ graph LR
     config -.-> application & interfaces
 ```
 
-| 패키지                                        | 역할                                                                                                  |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `interfaces.reset`                            | HTTP 컨트롤러 (`/api/auth`, `/api/device-interface`, EMR `/api/patients` 등), `@RestControllerAdvice` |
-| `interfaces.websocket`                        | WebSocket 핸들러, 메시지 라우팅, 이벤트 브로드캐스트                                                  |
-| `application.{auth,device,emr,chat,workitem}` | 유스케이스 서비스, JPA Entity, JPA Repository                                                         |
-| `domain.{auth,device,chat,workitem}`          | 순수 도메인 Record, 팩토리, Interpreter, Sorter                                                       |
-| `config`                                      | Spring 설정 빈 (Security, CORS, WebSocket, ConfigurationProperties)                                   |
-| `security`                                    | JWT 발급·파싱, 인증 필터, UserPrincipal                                                               |
+| 패키지                                        | 역할                                                                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `interfaces.reset`                            | HTTP 컨트롤러 (`/api/auth`, `/api/device-interface`, EMR `/api/patients` 등). 패키지 디렉터리명은 **`reset`**(REST 오타 아님). |
+| `interfaces.websocket`                        | WebSocket 핸들러, 메시지 라우팅, 이벤트 브로드캐스트                                                                           |
+| `application.{auth,device,emr,chat,workitem}` | 유스케이스 서비스, JPA Entity, JPA Repository                                                                                  |
+| `domain.{auth,device,chat,workitem}`          | 순수 도메인 Record, 팩토리, Interpreter, Sorter                                                                                |
+| `config`                                      | Spring 설정 빈 (Security, CORS, WebSocket, ConfigurationProperties)                                                            |
+| `security`                                    | JWT 발급·파싱, 인증 필터, UserPrincipal                                                                                        |
 
 ---
 
@@ -269,7 +287,7 @@ erDiagram
     APP_USER ||--o{ CHAT_MESSAGE : sends
 ```
 
-### EMR·HL7 (`patient`, `exam_order`, `observation_result`, …)
+### EMR·HL7 (`patient`, `exam_order`, `observation_result`, `hl7_message_log`, `medical_device`, `audit_log`)
 
 ```mermaid
 erDiagram
@@ -298,24 +316,41 @@ erDiagram
         VARCHAR message_control_id
         VARCHAR device_code
         VARCHAR observation_code
+        VARCHAR observation_name
         VARCHAR value
+        VARCHAR unit
+        VARCHAR reference_range
+        VARCHAR abnormal_flag
+        VARCHAR result_status
         TIMESTAMP observed_at
+        TIMESTAMP created_at
     }
     HL7_MESSAGE_LOG {
         UUID id PK
         VARCHAR message_control_id UK
-        VARCHAR process_status
+        VARCHAR message_type
+        VARCHAR device_code
+        VARCHAR patient_no
+        VARCHAR order_no
         TEXT raw_message
+        TEXT parsed_message_json
+        VARCHAR process_status
+        VARCHAR error_code
+        VARCHAR error_message
+        VARCHAR ack_code
         TEXT ack_message
         TIMESTAMP received_at
+        TIMESTAMP processed_at
     }
     MEDICAL_DEVICE {
         UUID id PK
         VARCHAR device_code UK
         VARCHAR device_name
+        VARCHAR device_type
         VARCHAR ip
         INT port
         VARCHAR status
+        TIMESTAMP last_connected_at
     }
     AUDIT_LOG {
         UUID id PK
@@ -329,6 +364,8 @@ erDiagram
     PATIENT ||--o{ OBSERVATION_RESULT : has
     EXAM_ORDER ||--o{ OBSERVATION_RESULT : produces
 ```
+
+> `hl7_message_log`·`medical_device`·`audit_log` 는 JPA 엔티티 기준으로 상기 필드를 갖으며, `ddl-auto: update` 로 스키마가 맞춰집니다. FK는 엔티티 연관에 맞게 생성되며 일부 테이블은 로그성으로 단독 적재됩니다.
 
 > **참고:** `CHAT_MESSAGE.sender_id` 등은 JPA `@JoinColumn`/`@Column` 수준의 연관이며, DB 레벨 FK constraint는 일부 생략될 수 있습니다. `ddl-auto: update` 설정으로 애플리케이션 기동 시 테이블이 자동 생성·보완됩니다.
 
@@ -391,22 +428,23 @@ graph LR
 
 ### 채팅 (`/api/chat`)
 
-| Method | Path                 | 인증 | 설명                              |
-| ------ | -------------------- | ---- | --------------------------------- |
-| `GET`  | `/api/chat/messages` | O    | 최근 채팅 메시지 목록 (최대 50건) |
+| Method | Path                 | 인증 | 설명                                                                |
+| ------ | -------------------- | ---- | ------------------------------------------------------------------- |
+| `GET`  | `/api/chat/messages` | O    | 최근 채팅 메시지 목록 (페이지네이션, `page` 쿼리)                   |
+| `POST` | `/api/chat/messages` | O    | 채팅 메시지 전송(JSON `{ "content" }`) — WebSocket 미연결 시 폴백용 |
 
-> 채팅 **전송**은 WebSocket(`CHAT` 타입 메시지)으로만 가능합니다.
+권장: 연결된 클라이언트는 WebSocket으로 `{ "type": "CHAT", "content": "…" }` 전송 → 서버가 `CHAT_MESSAGE` 로 브로드캐스트합니다. 운영 콘솔은 WS 우선, 끊긴 경우 REST `POST` 로도 전송합니다.
 
 ---
 
 ### 장비 인터페이스 (`/api/device-interface`)
 
-| Method | Path                                 | 인증    | 설명                                                     |
-| ------ | ------------------------------------ | ------- | -------------------------------------------------------- |
-| `GET`  | `/api/device-interface/overview`     | O       | TCP 포트·총 메시지 수·마지막 수신 시각·시뮬레이터 상태   |
-| `GET`  | `/api/device-interface/events`       | O       | 최근 장비 이벤트 25건                                    |
-| `POST` | `/api/device-interface/simulate`     | O ADMIN | 키-밸류·장비용 HL7 페이로드 직접 인젝션 (`device_event`) |
-| `POST` | `/api/device-interface/simulate/hl7` | O       | JSON으로 ORU^R01 템플릿 생성 후 EMR 파이프라인 실행      |
+| Method | Path                                 | 인증    | 설명                                                                |
+| ------ | ------------------------------------ | ------- | ------------------------------------------------------------------- |
+| `GET`  | `/api/device-interface/overview`     | O       | TCP 포트·총 메시지 수·마지막 수신 시각·시뮬레이터 상태              |
+| `GET`  | `/api/device-interface/events`       | O       | 최근 장비 이벤트 25건                                               |
+| `POST` | `/api/device-interface/simulate`     | O ADMIN | 키-밸류 장비 페이로드 수동 인젝션 → `device_event` (`payload` 본문) |
+| `POST` | `/api/device-interface/simulate/hl7` | O       | JSON으로 ORU^R01 템플릿 생성 후 EMR 파이프라인 실행                 |
 
 **DeviceOverview 응답:**
 
@@ -440,11 +478,11 @@ graph LR
 
 ### 작업 보드 (`/api/work-items`)
 
-| Method  | Path                            | 인증 | 설명                                    |
-| ------- | ------------------------------- | ---- | --------------------------------------- |
-| `POST`  | `/api/work-items`               | O    | 작업 항목 생성                          |
-| `GET`   | `/api/work-items?sortBy=RECENT` | O    | 목록 조회 (`RECENT` \| `PRIORITY`)      |
-| `PATCH` | `/api/work-items/{id}/status`   | O    | 상태 변경 (`TODO`→`IN_PROGRESS`→`DONE`) |
+| Method  | Path                            | 인증 | 설명                                           |
+| ------- | ------------------------------- | ---- | ---------------------------------------------- |
+| `POST`  | `/api/work-items`               | O    | 작업 항목 생성                                 |
+| `GET`   | `/api/work-items?sortBy=RECENT` | O    | 목록 조회 (`RECENT` \| `PRIORITY`)             |
+| `PATCH` | `/api/work-items/{id}/status`   | O    | 상태 변경 (`BACKLOG` → `IN_PROGRESS` → `DONE`) |
 
 ---
 
@@ -526,11 +564,19 @@ DEVICE=VITAL-01|PATIENT=P-1001|HEART_RATE=72|SPO2=98|STATUS=READY
 
 ### HL7 스타일
 
+**한 줄(짧은 ORU 형태)** 은 TCP 수신 후 `device_event` 용 인터프리터 체인으로 들어가 요약·저장될 수 있습니다.
+
 ```
 MSH|^~\&|HL7-GATEWAY-A|CAREBRIDGE|EMR|HOSPITAL|20260321153000||ORU^R01|MSG1|P|2.5
-PID|1||P-2001||SIMULATED^PATIENT
-OBR|1||LAB1|GLUCOSE^Glucose
-OBX|1|NM|GLUCOSE^Glucose||5.6|mmol/L|3.5-7.8|N
+```
+
+**멀티라인·EMR 적재** 는 `MSH` 로 시작하는 전체 배치가 `TcpDeviceGateway` 에서 `EmrInterfaceService` 로 직접 전달됩니다. 파서는 `PID-3` 환자번호, `OBR-2`(비어 있으면 `OBR-3`) 오더번호 등을 사용하므로, 데모 DB와 맞추려면 예를 들어 아래처럼 **`P0001` / `ORD-001`** 을 사용합니다.
+
+```
+MSH|^~\&|ECG-001|CAREBRIDGE|EMR|HOSPITAL|20260514103000||ORU^R01|MSG00001|P|2.5
+PID|||P0001||HONG^GILDONG||19800101|M
+OBR|1|ORD-001||ECG^심전도
+OBX|1|NM|HR^Heart Rate||78|bpm|60-100|N
 ```
 
 - `MSH[2]` or `MSH[3]` → `deviceCode`
@@ -560,6 +606,7 @@ OBX|1|NM|GLUCOSE^Glucose||5.6|mmol/L|3.5-7.8|N
 ```
 carebridge-platform/
 ├── README.md
+├── docker-compose.yml                       # 로컬 PostgreSQL(5433)·Redis(9379) — 선택
 ├── backend/                                 # Spring Boot 4 — HTTP :8080, TCP :9093
 │   ├── build.gradle.kts
 │   ├── gradlew / gradlew.bat
@@ -581,7 +628,8 @@ carebridge-platform/
     └── src/
         ├── app/                             # layout, page, globals.css
         └── features/
-            ├── console/                     # 운영 콘솔 (로그인, 채팅, 장비, EMR 뷰, WebSocket)
+            ├── chat/                        # 채팅 패널 UI
+            ├── console/                     # 운영 콘솔 (로그인, 작업 보드, 채팅, EMR·HL7, WebSocket)
             └── work-items/                  # 작업 보드
 ```
 
@@ -589,22 +637,35 @@ carebridge-platform/
 
 ## 사전 요구 사항
 
-| 항목       | 버전 / 설정                                          |
-| ---------- | ---------------------------------------------------- |
-| JDK        | **21** (Gradle 툴체인과 일치)                        |
-| PostgreSQL | 호스트 `localhost`, 포트 **`5433`**, DB `carebridge` |
-| Redis      | `localhost:9379`, 비밀번호 `123456`                  |
-| Node.js    | LTS 20+                                              |
-| pnpm       | `npm install -g pnpm`                                |
+| 항목       | 버전 / 설정                                                     |
+| ---------- | --------------------------------------------------------------- |
+| JDK        | **25** (`backend/build.gradle.kts` 의 `java.toolchain` 과 동일) |
+| PostgreSQL | 호스트 `localhost`, 포트 **`5433`**, DB `carebridge`            |
+| Redis      | `localhost:9379`, 비밀번호 `123456`                             |
+| Node.js    | LTS 20+                                                         |
+| pnpm       | `npm install -g pnpm`                                           |
 
 ---
 
 ## 빠른 시작
 
+### 0) (선택) PostgreSQL·Redis만 Docker로
+
+저장소 루트(`carebridge-platform/`)에서:
+
+```powershell
+docker compose up -d
+```
+
+- PostgreSQL: `localhost:5433`, DB `carebridge`, 사용자/비밀번호 `postgres` / `postgres`
+- Redis: `localhost:9379`, 비밀번호 `123456`
+
+애플리케이션의 `application.yml` 기본값과 맞춰 두었습니다.
+
 ### 1) 백엔드
 
-```linux
-cd root\carebridge-platform\backend
+```powershell
+cd carebridge-platform/backend
 .\gradlew.bat bootRun
 ```
 
@@ -614,8 +675,8 @@ cd root\carebridge-platform\backend
 
 ### 2) 프론트엔드
 
-```linux
-cd root\carebridge-platform\frontend
+```powershell
+cd carebridge-platform/frontend
 pnpm install
 pnpm dev
 ```
@@ -652,31 +713,33 @@ Get-NetTCPConnection -LocalPort 8080,9093 -State Listen
 
 ## 환경 변수
 
-| 환경 변수                               | 기본값                        | 설명                               |
-| --------------------------------------- | ----------------------------- | ---------------------------------- |
-| `POSTGRES_HOST`                         | `localhost`                   | PostgreSQL 호스트                  |
-| `POSTGRES_PORT`                         | `5433`                        | PostgreSQL 포트                    |
-| `POSTGRES_DB`                           | `carebridge`                  | DB 이름                            |
-| `POSTGRES_USERNAME`                     | `postgres`                    | DB 사용자                          |
-| `POSTGRES_PASSWORD`                     | `postgres`                    | DB 비밀번호                        |
-| `REDIS_HOST`                            | `localhost`                   | Redis 호스트                       |
-| `REDIS_PORT`                            | `9379`                        | Redis 포트                         |
-| `REDIS_PASSWORD`                        | `123456`                      | Redis 비밀번호                     |
-| `APP_TOKEN_SECRET`                      | _(기본값)_                    | **프로덕션 필수 교체** JWT 서명 키 |
-| `SERVER_PORT`                           | `8080`                        | HTTP 서버 포트                     |
-| `TCP_SERVER_PORT`                       | `9093`                        | TCP 수신 포트                      |
-| `DEVICE_SIMULATOR_ENABLED`              | `true`                        | 시뮬레이터 활성화                  |
-| `DEVICE_SIMULATOR_HOST`                 | `127.0.0.1`                   | 시뮬레이터 타겟 호스트             |
-| `DEVICE_SIMULATOR_PORT`                 | `9093`                        | 시뮬레이터 타겟 포트               |
-| `DEVICE_SIMULATOR_INTERVAL_MILLIS`      | `7000`                        | 메시지 전송 간격 (ms)              |
-| `DEVICE_SIMULATOR_INITIAL_DELAY_MILLIS` | `5000`                        | 최초 전송 지연 (ms)                |
-| `NEXT_PUBLIC_API_BASE_URL`              | `http://localhost:8080`       | 프론트 → 백엔드 REST 주소          |
-| `NEXT_PUBLIC_WS_BASE_URL`               | `ws://localhost:8080/ws/chat` | 프론트 → 백엔드 WS 주소            |
+| 환경 변수                                 | 기본값                        | 설명                               |
+| ----------------------------------------- | ----------------------------- | ---------------------------------- |
+| `POSTGRES_HOST`                           | `localhost`                   | PostgreSQL 호스트                  |
+| `POSTGRES_PORT`                           | `5433`                        | PostgreSQL 포트                    |
+| `POSTGRES_DB`                             | `carebridge`                  | DB 이름                            |
+| `POSTGRES_USERNAME`                       | `postgres`                    | DB 사용자                          |
+| `POSTGRES_PASSWORD`                       | `postgres`                    | DB 비밀번호                        |
+| `REDIS_HOST`                              | `localhost`                   | Redis 호스트                       |
+| `REDIS_PORT`                              | `9379`                        | Redis 포트                         |
+| `REDIS_PASSWORD`                          | `123456`                      | Redis 비밀번호                     |
+| `APP_TOKEN_SECRET`                        | _(기본값)_                    | **프로덕션 필수 교체** JWT 서명 키 |
+| `SERVER_PORT`                             | `8080`                        | HTTP 서버 포트                     |
+| `TCP_SERVER_PORT`                         | `9093`                        | TCP 수신 포트                      |
+| `DEVICE_SIMULATOR_ENABLED`                | `true`                        | 시뮬레이터 활성화                  |
+| `DEVICE_SIMULATOR_HOST`                   | `127.0.0.1`                   | 시뮬레이터 타겟 호스트             |
+| `DEVICE_SIMULATOR_PORT`                   | `9093`                        | 시뮬레이터 타겟 포트               |
+| `DEVICE_SIMULATOR_INTERVAL_MILLIS`        | `7000`                        | 메시지 전송 간격 (ms)              |
+| `DEVICE_SIMULATOR_INITIAL_DELAY_MILLIS`   | `5000`                        | 최초 전송 지연 (ms)                |
+| `DEVICE_SIMULATOR_CONNECT_TIMEOUT_MILLIS` | `5000`                        | 시뮬레이터 TCP 연결 타임아웃 (ms)  |
+| `DEVICE_SIMULATOR_READ_TIMEOUT_MILLIS`    | `30000`                       | 시뮬레이터 ACK 읽기 타임아웃 (ms)  |
+| `NEXT_PUBLIC_API_BASE_URL`                | `http://localhost:8080`       | 프론트 → 백엔드 REST 주소          |
+| `NEXT_PUBLIC_WS_BASE_URL`                 | `ws://localhost:8080/ws/chat` | 프론트 → 백엔드 WS 주소            |
 
 HTTP 포트를 `8081`, TCP를 `9094`로 변경하는 예:
 
 ```powershell
-cd D:\intel3\carebridge-platform\backend
+cd carebridge-platform/backend
 $env:SERVER_PORT='8081'
 $env:TCP_SERVER_PORT='9094'
 $env:DEVICE_SIMULATOR_PORT='9094'
@@ -702,6 +765,13 @@ MSH|^~\&|HL7-GATEWAY-A|CAREBRIDGE|EMR|HOSPITAL|...  (HL7 스타일)
 $env:DEVICE_SIMULATOR_ENABLED='false'
 .\gradlew.bat bootRun
 ```
+
+## 백엔드 테스트
+
+- **현재:** `backend/src/test/java/com/sleekydz86/carebridge/backend/BackendApplicationTests.java` — 애플리케이션 컨텍스트 기동 스모크.
+- **권장:** `Hl7MessageParser`(세그먼트·`messageControlId`·다중 OBX), `EmrInterfaceService`(정상 적재·중복 `messageControlId`·미등록 환자/오더·ACK 분기), TCP `MSH|` vs 키-밸류 라우팅에 대한 단위·통합 테스트를 단계적으로 추가하면 포트폴리오 신뢰도가 올라갑니다.
+
+---
 
 ## 실시간 데이터 흐름
 
